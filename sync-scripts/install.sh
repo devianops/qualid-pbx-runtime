@@ -48,7 +48,15 @@ if [ "${SCRIPT_DIR}" != "${QUALID_DIR}/sync-scripts" ]; then
     if [ -f "${SCRIPT_DIR}/deferred_rtp.php" ]; then
         cp -f "${SCRIPT_DIR}/deferred_rtp.php" "${QUALID_DIR}/sync-scripts/"
     fi
-    cp -f "${SCRIPT_DIR}/update.sh" "${QUALID_DIR}/"
+fi
+
+# Always ensure update.sh is at the top-level path the updater service expects
+# (/usr/share/qualid/update.sh). On first boot it lives in sync-scripts/;
+# on auto-update it arrives from the tarball root — either way, copy it up.
+_update_src="${SCRIPT_DIR}/update.sh"
+[ -f "${_update_src}" ] || _update_src="${QUALID_DIR}/sync-scripts/update.sh"
+if [ -f "${_update_src}" ]; then
+    cp -f "${_update_src}" "${QUALID_DIR}/update.sh"
     chmod +x "${QUALID_DIR}/update.sh"
 fi
 
