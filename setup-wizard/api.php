@@ -118,6 +118,10 @@ if ($action === 'activate') {
     $token = trim($_POST['token'] ?? '');
     if (!$token) fail('token is required.');
 
+    // Ensure this device has a stable UUID before any API calls are made.
+    // On first activation this generates and persists the UUID to config.json.
+    qualid_get_device_uuid();
+
     // Step 1: Provision trunk with cloud (gets SIP creds + TURN config)
     $result = qualid_provision_trunk($token);
     if (empty($result['success'])) {
@@ -189,6 +193,41 @@ if ($action === 'activate') {
         'name'         => qualid_get('user_name',    ''),
         'company_name' => qualid_get('company_name', ''),
     ]);
+}
+
+// ---------------------------------------------------------------------------
+// get_device_info — returns device uuid + user-set display name (GET-safe)
+// ---------------------------------------------------------------------------
+if ($action === 'get_device_info') {
+    ok([
+        'device_uuid'  => qualid_get_device_uuid(),
+        'display_name' => qualid_get('display_name', ''),
+        'hostname'     => gethostname(),
+    ]);
+}
+
+// ---------------------------------------------------------------------------
+// set_device_name — save display name locally + sync to cloud
+// ---------------------------------------------------------------------------
+if ($action === 'set_device_name') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail('POST required.', 405);
+    $name = trim($_POST['display_name'] ?? '');
+    if (!$name) fail('display_name is required.');
+    if (mb_strlen($name) > 100) fail('Name too long (max 100 characters).');
+
+    qualid_set('display_name', $name);
+
+    // Best-effort sync to cloud — non-fatal if offline
+    $token = qualid_get('token', '');
+    if ($token) {
+        qualid_curl_post(
+            QUALID_MAIN_API . '/pbx/device-name',
+            ['device_uuid' => qualid_get_device_uuid(), 'display_name' => $name],
+            ['Authorization: Bearer ' . $token]
+        );
+    }
+
+    ok(['display_name' => $name]);
 }
 
 // ---------------------------------------------------------------------------

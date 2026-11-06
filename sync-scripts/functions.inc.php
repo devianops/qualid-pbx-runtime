@@ -71,7 +71,27 @@ function qualid_get_all() {
         'connected_at'       => qualid_get('connected_at',       ''),
         'last_error'         => qualid_get('last_error',         ''),
         'agi_secret'         => qualid_get('agi_secret',         ''),
+        'device_uuid'        => qualid_get('device_uuid',        ''),
     ];
+}
+
+/**
+ * Return this device's stable UUID, generating one on first call.
+ * Persisted in config.json — never changes after generation.
+ */
+function qualid_get_device_uuid() {
+    $uuid = qualid_get('device_uuid', '');
+    if (empty($uuid)) {
+        $uuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+        );
+        qualid_set('device_uuid', $uuid);
+    }
+    return $uuid;
 }
 
 // ---------------------------------------------------------------------------
@@ -845,7 +865,7 @@ function qualid_remove_agi_files() {
 function qualid_register_agi_secret($token, $agi_secret) {
     return qualid_curl_post(
         QUALID_MAIN_API . '/ivr/set-agi-secret',
-        ['agi_secret' => $agi_secret],
+        ['agi_secret' => $agi_secret, 'device_uuid' => qualid_get_device_uuid()],
         ['Authorization: Bearer ' . $token]
     );
 }
@@ -906,6 +926,7 @@ function qualid_collect_device_metrics() {
  */
 function qualid_send_heartbeat($token) {
     $metrics = qualid_collect_device_metrics();
+    $metrics['device_uuid'] = qualid_get_device_uuid();
     $result  = qualid_curl_post(
         QUALID_MAIN_API . '/ivr/heartbeat',
         $metrics,
@@ -936,7 +957,7 @@ function qualid_push_pbx_host($token) {
 
     return qualid_curl_post(
         QUALID_MAIN_API . '/company/pbx-host',
-        ['pbx_host' => $host, 'pbx_port' => 5060],
+        ['pbx_host' => $host, 'pbx_port' => 5060, 'device_uuid' => qualid_get_device_uuid()],
         ['Authorization: Bearer ' . $token]
     );
 }
@@ -1184,7 +1205,7 @@ function qualid_sync_extensions($token) {
     // write PJSIP configs on first activation.
     $result = qualid_curl_post(
         QUALID_MAIN_API . '/extensions/sync',
-        ['extensions' => $extensions],
+        ['extensions' => $extensions, 'device_uuid' => qualid_get_device_uuid()],
         ['Authorization: Bearer ' . $token]
     );
 
@@ -1196,7 +1217,7 @@ function qualid_sync_extensions($token) {
     // GET /extensions returns all extensions including SIP secrets so the PBX
     // can write PJSIP endpoint + auth config for local agent registration.
     $list_result = qualid_curl_get(
-        QUALID_MAIN_API . '/extensions',
+        QUALID_MAIN_API . '/extensions?device_uuid=' . urlencode(qualid_get_device_uuid()),
         ['Authorization: Bearer ' . $token]
     );
 
@@ -1225,7 +1246,7 @@ function qualid_sync_extensions($token) {
  */
 function qualid_sync_queues($token) {
     $result = qualid_curl_get(
-        QUALID_MAIN_API . '/ivr/queues/asterisk-config',
+        QUALID_MAIN_API . '/ivr/queues/asterisk-config?device_uuid=' . urlencode(qualid_get_device_uuid()),
         array('Authorization: Bearer ' . $token)
     );
 
@@ -2105,7 +2126,7 @@ function qualid_sync_trunks($token) {
 
     $result = qualid_curl_post(
         QUALID_MAIN_API . '/outbound/trunks/sync',
-        ['trunks' => $trunks],
+        ['trunks' => $trunks, 'device_uuid' => qualid_get_device_uuid()],
         ['Authorization: Bearer ' . $token]
     );
 
