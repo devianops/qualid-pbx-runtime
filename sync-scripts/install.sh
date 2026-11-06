@@ -175,7 +175,11 @@ if [[ -d "${WIZARD_SRC}" ]]; then
     PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || echo "8.2")
     PHP_POOL_DIR="/etc/php/${PHP_VER}/fpm/pool.d"
     if [[ -d "${PHP_POOL_DIR}" ]]; then
-        cat > "${PHP_POOL_DIR}/qualid.conf" <<'POOL'
+        # Only write the pool config when it does not already exist.
+        # On auto-update it is already present; rewriting it would require /etc/php
+        # to be writable, which fails under ProtectSystem=full in older service files.
+        if [[ ! -f "${PHP_POOL_DIR}/qualid.conf" ]]; then
+            cat > "${PHP_POOL_DIR}/qualid.conf" <<'POOL'
 [qualid]
 user  = www-data
 group = www-data
@@ -193,8 +197,13 @@ php_admin_flag[log_errors] = on
 ; Allow shell_exec — Debian php.ini may disable it; needed for Asterisk CLI calls
 php_admin_value[disable_functions] =
 POOL
-        sed -i 's/\r//' "${PHP_POOL_DIR}/qualid.conf"
-        # Create error log and ensure www-data can write to /etc/qualid
+            sed -i 's/\r//' "${PHP_POOL_DIR}/qualid.conf"
+            systemctl restart "php${PHP_VER}-fpm" 2>/dev/null || systemctl restart php-fpm 2>/dev/null || true
+            log "PHP-FPM pool configured."
+        else
+            log "PHP-FPM pool already configured — skipping."
+        fi
+        # Ownership/permission fixes — safe to run on every update
         touch /var/log/qualid-wizard.log
         chown www-data:www-data /var/log/qualid-wizard.log
         chown www-data:www-data /etc/qualid
@@ -205,8 +214,6 @@ POOL
             chown root:asterisk /etc/asterisk 2>/dev/null || true
             chmod g+w /etc/asterisk 2>/dev/null || true
         fi
-        systemctl restart "php${PHP_VER}-fpm" 2>/dev/null || systemctl restart php-fpm 2>/dev/null || true
-        log "PHP-FPM pool configured."
     fi
 
     # Sudoers rule so www-data can enable timers, reload nginx, and reload

@@ -15,8 +15,10 @@ SyslogIdentifier=qualid-updater
 TimeoutStartSec=600
 
 # ---------------------------------------------------------------------------
-# Sandboxing — updater runs as root but restrict what it can touch
-# (must write to /usr/share/qualid, /etc/asterisk, /etc/systemd/system)
+# Sandboxing — updater runs as root but restrict what it can touch.
+# ReadWritePaths overrides ProtectSystem for specific directories, so even if
+# an older service file has ProtectSystem=full, the listed /etc/* paths remain
+# writable.  Add any new /etc paths that install.sh must write here.
 # ---------------------------------------------------------------------------
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -26,7 +28,8 @@ PrivateTmp=yes
 ProtectSystem=yes
 ProtectHome=yes
 ReadWritePaths=/usr/share/qualid /etc/qualid /etc/asterisk /etc/systemd/system \
-               /var/lib/asterisk/agi-bin /tmp
+               /etc/php /etc/sudoers.d /etc/nginx \
+               /var/lib/asterisk/agi-bin /var/log /tmp
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
