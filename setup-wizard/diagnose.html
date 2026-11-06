@@ -47,7 +47,7 @@
     align-items: center;
     gap: 20px;
     width: 100%;
-    max-width: 560px;
+    max-width: 920px;
   }
 
   .logo img {
@@ -152,8 +152,16 @@
   .summary-pill.warn { background: var(--warn-bg);  color: var(--warn); border: 1px solid var(--warn-border); }
   .summary-pill.fail { background: var(--fail-bg);  color: var(--fail); border: 1px solid var(--fail-border); }
 
-  /* Check rows */
-  .checks { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  /* Check rows — two-column grid */
+  .checks {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 16px;
+  }
+  @media (max-width: 600px) {
+    .checks { grid-template-columns: 1fr; }
+  }
 
   .check-row {
     display: flex;
