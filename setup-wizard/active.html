@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quali-D PBX &mdash; Active</title>
+<link rel="icon" type="image/png" href="Icon.png">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f4f7fb;
+    --panel:     #ffffff;
+    --bg2:       #f8fafc;
+    --border:    #e2e8f0;
+    --accent:    #2fc4b5;
+    --accent-dk: #1a8f84;
+    --text:      #1a2535;
+    --muted:     #64748b;
+    --success:   #16a394;
+    --radius:    14px;
+    --radius-sm: 9px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .logo img {
+    height: 260px;
+    width: auto;
+    display: block;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    padding: 36px 36px 32px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.07), 0 1px 4px rgba(0,0,0,.04);
+    text-align: center;
+  }
+
+  .activated-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(22,163,148,.08);
+    border: 1px solid rgba(22,163,148,.25);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 12px;
+    color: var(--success);
+    font-weight: 700;
+    margin-bottom: 24px;
+    letter-spacing: .3px;
+  }
+  .activated-badge::before {
+    content: '';
+    display: block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: pulse-dot 2s ease infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: .5; transform: scale(.75); }
+  }
+
+  .done-icon {
+    width: 68px;
+    height: 68px;
+    background: rgba(22,163,148,.1);
+    border: 2px solid var(--success);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    color: var(--success);
+    margin: 0 auto 24px;
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -.2px;
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+
+  .info-box {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 15px 18px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.8;
+    text-align: left;
+  }
+  .info-box strong { color: var(--text); }
+
+  .sync-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--success);
+    font-weight: 600;
+    margin-top: 16px;
+    justify-content: center;
+  }
+  .sync-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: pulse-dot 2s ease infinite;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="logo">
+    <img src="QualiD_PBX_Logo.png" alt="Quali-D PBX" onerror="this.style.display='none'">
+  </div>
+
+  <div class="card">
+    <div class="activated-badge">Active</div>
+    <div class="done-icon">&#10003;</div>
+    <h2>Quali-D PBX is Active</h2>
+    <p class="subtitle">This PBX is connected to the Quali-D cloud and syncing automatically.</p>
+
+    <div class="info-box">
+      Manage <strong>extensions</strong>, <strong>queues</strong>, and <strong>IVR flows</strong>
+      from the <strong>Quali-D web portal</strong> &mdash; changes sync to this PBX automatically
+      every 5 minutes.
+    </div>
+
+    <div class="sync-row">
+      <span class="sync-dot"></span>
+      Syncing with cloud every 5 minutes
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,34 @@
+[Unit]
+Description=Quali-D PBX Sync — push extensions/CDR/queues to cloud
+After=network-online.target asterisk.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=asterisk
+Group=asterisk
+ExecStart=/usr/bin/php -d pcre.jit=0 /usr/share/qualid/sync-scripts/sync.php
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=qualid-sync
+# Allow up to 5 minutes for a slow API round-trip
+TimeoutStartSec=300
+
+# ---------------------------------------------------------------------------
+# Sandboxing — sync only needs to read configs + write CDR + call the API
+# ---------------------------------------------------------------------------
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/etc/qualid /var/spool/asterisk /var/log/asterisk /tmp /etc/asterisk /etc/hosts
+ReadOnlyPaths=/usr/share/qualid
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+SystemCallArchitectures=native

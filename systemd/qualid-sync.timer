@@ -1,0 +1,16 @@
+[Unit]
+Description=Quali-D PBX Sync — run every minute
+Requires=qualid-sync.service
+
+[Timer]
+# Run 60 s after boot so Asterisk is fully up
+OnBootSec=60s
+# Then every minute — fast enough for dashboard changes to land within ~1 min
+OnUnitActiveSec=1min
+# Jitter up to 10 s so multiple PBX boxes don't all hit the API simultaneously
+RandomizedDelaySec=10
+AccuracySec=1s
+Unit=qualid-sync.service
+
+[Install]
+WantedBy=timers.target

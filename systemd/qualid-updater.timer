@@ -1,0 +1,16 @@
+[Unit]
+Description=Quali-D PBX Auto-Updater — check for updates every hour
+Requires=qualid-updater.service
+
+[Timer]
+# First check 5 minutes after boot
+OnBootSec=5min
+# Then every hour
+OnUnitActiveSec=1h
+# Stagger boxes by up to 10 minutes so they don't all pull at once
+RandomizedDelaySec=600
+AccuracySec=1s
+Unit=qualid-updater.service
+
+[Install]
+WantedBy=timers.target

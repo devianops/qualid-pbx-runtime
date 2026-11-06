@@ -1,0 +1,35 @@
+[Unit]
+Description=Quali-D PBX Auto-Updater — pull latest release from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+# Check GitHub for a newer release; if found, download and install it.
+# /usr/share/qualid/update.sh writes the new files and reloads Asterisk.
+ExecStart=/usr/share/qualid/update.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=qualid-updater
+TimeoutStartSec=600
+
+# ---------------------------------------------------------------------------
+# Sandboxing — updater runs as root but restrict what it can touch
+# (must write to /usr/share/qualid, /etc/asterisk, /etc/systemd/system)
+# ---------------------------------------------------------------------------
+NoNewPrivileges=yes
+PrivateTmp=yes
+# ProtectSystem=strict would block writing to /usr/share — use 'full' instead
+ProtectSystem=full
+ProtectHome=yes
+ReadWritePaths=/usr/share/qualid /etc/qualid /etc/asterisk /etc/systemd/system \
+               /var/lib/asterisk/agi-bin /tmp
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallFilter=@system-service @file-system @network-io
+SystemCallArchitectures=native

@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quali-D PBX Setup</title>
+<link rel="icon" type="image/png" href="Icon.png">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f4f7fb;
+    --panel:     #ffffff;
+    --bg2:       #f8fafc;
+    --border:    #e2e8f0;
+    --accent:    #2fc4b5;
+    --accent-dk: #1a8f84;
+    --text:      #1a2535;
+    --muted:     #64748b;
+    --soft:      #475569;
+    --success:   #16a394;
+    --error:     #dc2626;
+    --radius:    14px;
+    --radius-sm: 9px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  /* ── Page wrapper (logo + card stacked) ──────────────────────────────── */
+  .page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  /* ── Logo (above card, on white background — no pill needed) ─────────── */
+  .logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo img {
+    height: 260px;
+    width: auto;
+    display: block;
+  }
+  .logo .sub { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+  /* ── Card ─────────────────────────────────────────────────────────────── */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    padding: 36px 36px 32px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.07), 0 1px 4px rgba(0,0,0,.04);
+  }
+
+  /* ── Step indicators ──────────────────────────────────────────────────── */
+  .steps {
+    display: flex;
+    align-items: center;
+    margin-bottom: 30px;
+  }
+  .step-dot {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    transition: all .3s;
+    flex-shrink: 0;
+  }
+  .step-dot.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 4px rgba(47,196,181,.12); }
+  .step-dot.done   { border-color: var(--success); background: var(--success); color: #fff; }
+  .step-line       { flex: 1; height: 2px; background: var(--border); transition: background .3s; }
+  .step-line.done  { background: var(--success); }
+
+  /* ── Typography ───────────────────────────────────────────────────────── */
+  h2       { font-size: 20px; font-weight: 700; letter-spacing: -.2px; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 26px; line-height: 1.6; }
+
+  label {
+    display: block; font-size: 11.5px; font-weight: 600;
+    color: var(--soft); letter-spacing: .4px;
+    text-transform: uppercase; margin-bottom: 7px;
+  }
+
+  /* ── Inputs ───────────────────────────────────────────────────────────── */
+  input[type=text], input[type=password] {
+    width: 100%;
+    background: var(--bg2);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 15px;
+    padding: 12px 14px;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    -webkit-appearance: none;
+    appearance: none;
+    margin-bottom: 18px;
+  }
+  input[type=text]:focus, input[type=password]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(47,196,181,.13);
+    background: #fff;
+  }
+  input.error { border-color: var(--error); }
+  input::placeholder { color: #b0bec5; }
+
+  /* ── Phone field with locked country-code prefix ──────────────────────── */
+  .phone-wrap {
+    display: flex;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--bg2);
+    margin-bottom: 18px;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .phone-wrap:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(47,196,181,.13);
+  }
+  .phone-prefix {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 10px 0 14px;
+    background: #f1f5f9;
+    border-right: 1.5px solid var(--border);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: default;
+    user-select: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .phone-prefix .flag   { display: block; }
+  .phone-prefix .cc     { letter-spacing: .3px; }
+  .phone-prefix .caret  { color: var(--muted); font-size: 11px; margin-left: 2px; }
+  .phone-wrap input[type=tel] {
+    flex: 1;
+    border: none;
+    background: transparent;
+    outline: none;
+    color: var(--text);
+    font-size: 15px;
+    padding: 12px 14px;
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+  }
+  .phone-wrap input[type=tel]::placeholder { color: #b0bec5; }
+
+  /* ── Button ───────────────────────────────────────────────────────────── */
+  .btn {
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dk) 100%);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 13px;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s, box-shadow .2s;
+    margin-top: 4px;
+    letter-spacing: .2px;
+  }
+  .btn:hover:not(:disabled) { opacity: .92; box-shadow: 0 4px 18px rgba(47,196,181,.35); }
+  .btn:active:not(:disabled) { transform: scale(.98); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── Error box ────────────────────────────────────────────────────────── */
+  .err-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-sm);
+    color: var(--error);
+    font-size: 13px;
+    padding: 11px 14px;
+    margin-bottom: 18px;
+    display: none;
+    line-height: 1.5;
+  }
+  .err-box.show { display: block; }
+
+  /* ── Spinner ──────────────────────────────────────────────────────────── */
+  .spinner-wrap {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 0 12px; gap: 22px;
+  }
+  .spinner {
+    width: 52px; height: 52px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .progress-log {
+    width: 100%;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 110px;
+    max-height: 170px;
+    overflow-y: auto;
+    line-height: 2;
+    font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
+  }
+  .progress-log .ok   { color: var(--success); }
+  .progress-log .fail { color: var(--error); }
+
+  /* ── Done screen ──────────────────────────────────────────────────────── */
+  .done-icon {
+    width: 68px; height: 68px;
+    background: rgba(22,163,148,.1);
+    border: 2px solid var(--success);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; color: var(--success);
+    margin: 0 auto 24px;
+  }
+  .done-detail {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 15px 18px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.8;
+    margin-top: 20px;
+  }
+  .done-detail strong { color: var(--text); }
+
+  /* ── Screens ──────────────────────────────────────────────────────────── */
+  .screen        { display: none; }
+  .screen.active { display: block; }
+
+  /* ── OTP boxes ────────────────────────────────────────────────────────── */
+  .otp-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    justify-content: center;
+  }
+  .otp-box {
+    width: 48px !important;
+    height: 56px;
+    text-align: center;
+    font-size: 22px !important;
+    font-weight: 700;
+    padding: 0 !important;
+    border-radius: 10px !important;
+    letter-spacing: 0;
+    caret-color: var(--accent);
+    margin-bottom: 0 !important;
+  }
+  .otp-box:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(47,196,181,.15) !important;
+    background: #fff !important;
+  }
+  .otp-hint {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    margin-bottom: 24px;
+    margin-top: 6px;
+  }
+
+  /* ── Back link ────────────────────────────────────────────────────────── */
+  .back-link {
+    display: block; text-align: center; margin-top: 18px;
+    font-size: 13px; color: var(--muted); cursor: pointer;
+    text-decoration: none; background: none; border: none;
+    transition: color .2s;
+  }
+  .back-link:hover { color: var(--text); }
+
+  /* ── Already-activated badge ──────────────────────────────────────────── */
+  .activated-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(22,163,148,.08); border: 1px solid rgba(22,163,148,.25);
+    border-radius: 20px; padding: 5px 14px;
+    font-size: 12px; color: var(--success); font-weight: 700;
+    margin-bottom: 24px; letter-spacing: .3px;
+  }
+  .activated-badge::before {
+    content: ''; display: block;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--success);
+    animation: pulse-dot 2s ease infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: .5; transform: scale(.75); }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- Logo — above the card, on plain white background -->
+  <div class="logo">
+    <img src="QualiD_PBX_Logo.png" alt="Quali-D PBX" onerror="this.style.display='none'">
+    <span class="sub">Setup Wizard</span>
+  </div>
+
+  <div class="card">
+
+    <!-- Step indicators: Sign In · Activate · Done -->
+    <div class="steps" id="steps-bar">
+      <div class="step-dot active" id="dot-1">1</div>
+      <div class="step-line"       id="line-1"></div>
+      <div class="step-dot"        id="dot-2">2</div>
+      <div class="step-line"       id="line-2"></div>
+      <div class="step-dot"        id="dot-3">&#10003;</div>
+    </div>
+
+    <!-- ── Screen: already activated ─────────────────────────────────────── -->
+    <div class="screen" id="screen-already">
+      <div class="activated-badge">Active</div>
+      <h2>PBX Already Active</h2>
+      <p class="subtitle">This device is already set up and connected to the Quali-D cloud.</p>
+      <div class="done-detail">
+        Manage your extensions, queues, and IVR flows from the<br>
+        <strong>Quali-D web portal</strong> &mdash; changes sync automatically every 5 minutes.
+      </div>
+    </div>
+
+    <!-- ── Screen 1: Login ────────────────────────────────────────────────── -->
+    <div class="screen active" id="screen-login">
+      <h2>Sign in</h2>
+      <p class="subtitle">Enter your Quali-D credentials to connect this PBX to the cloud.</p>
+
+      <div class="err-box" id="login-err"></div>
+
+      <label for="phone">Phone number</label>
+      <div class="phone-wrap">
+        <div class="phone-prefix">
+          <svg class="flag" width="22" height="15" viewBox="0 0 22 15" xmlns="http://www.w3.org/2000/svg" style="border-radius:2px;flex-shrink:0">
+            <rect width="22" height="5" fill="#CE1126"/>
+            <rect y="5" width="22" height="5" fill="#fff"/>
+            <rect y="10" width="22" height="5" fill="#000"/>
+          </svg>
+          <span class="cc">+20</span>
+          <span class="caret">&#8964;</span>
+        </div>
+        <input type="tel" id="phone" placeholder="01X XXXX XXXX" autocomplete="tel">
+      </div>
+
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" autocomplete="current-password">
+
+      <button class="btn" id="btn-login" onclick="doLogin()" disabled>Connect PBX</button>
+    </div>
+
+    <!-- ── Screen 1b: TOTP ────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-totp">
+      <h2>Verification code</h2>
+      <p class="subtitle">Enter the 6-digit code from your authenticator app.</p>
+
+      <div class="err-box" id="totp-err"></div>
+
+      <div class="otp-row">
+        <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp-0" autocomplete="off">
+        <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp-1" autocomplete="off">
+        <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp-2" autocomplete="off">
+        <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp-3" autocomplete="off">
+        <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp-4" autocomplete="off">
+        <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp-5" autocomplete="off">
+      </div>
+      <p class="otp-hint">Code changes every 30 seconds</p>
+
+      <button class="btn" id="btn-totp" onclick="doTotp()">Verify</button>
+      <button class="back-link" onclick="showScreen('login')">&#8592; Back to sign in</button>
+    </div>
+
+    <!-- ── Screen 2: Activating ───────────────────────────────────────────── -->
+    <div class="screen" id="screen-activating">
+      <h2>Activating&hellip;</h2>
+      <p class="subtitle">Setting up your PBX &mdash; this takes about 10 seconds.</p>
+
+      <div class="spinner-wrap">
+        <div class="spinner"></div>
+        <div class="progress-log" id="progress-log"></div>
+      </div>
+    </div>
+
+    <!-- ── Screen 3: Done ─────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-done">
+      <div class="done-icon">&#10003;</div>
+      <h2 style="text-align:center">You&rsquo;re all set!</h2>
+      <p class="subtitle" style="text-align:center">Your Quali-D PBX is live and syncing with the cloud.</p>
+      <div class="done-detail" id="done-detail">
+        Logged in as <strong id="done-name">&mdash;</strong><br>
+        Organisation: <strong id="done-company">&mdash;</strong><br><br>
+        Extensions, queues, and IVR flows are managed from the
+        <strong>Quali-D web portal</strong>.<br>
+        This setup page is now disabled.
+      </div>
+    </div>
+
+  </div><!-- /card -->
+</div><!-- /page -->
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let _tempToken = '';
+let _token     = '';
+let _name      = '';
+let _company   = '';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  updateSteps(id);
+  if (id === 'totp') setTimeout(() => document.getElementById('otp-0').focus(), 50);
+}
+
+function updateSteps(screen) {
+  const dot  = id => document.getElementById('dot-'  + id);
+  const line = id => document.getElementById('line-' + id);
+  const mark = (d, cls) => { d.className = 'step-dot' + (cls ? ' ' + cls : ''); };
+
+  if (screen === 'login' || screen === 'totp') {
+    mark(dot(1),'active'); mark(dot(2),''); mark(dot(3),'');
+    line(1).className = 'step-line'; line(2).className = 'step-line';
+  } else if (screen === 'activating') {
+    mark(dot(1),'done'); mark(dot(2),'active'); mark(dot(3),'');
+    line(1).className = 'step-line done'; line(2).className = 'step-line';
+  } else if (screen === 'done') {
+    mark(dot(1),'done'); mark(dot(2),'done'); mark(dot(3),'done');
+    line(1).className = 'step-line done'; line(2).className = 'step-line done';
+  } else {
+    document.getElementById('steps-bar').style.display = 'none';
+  }
+}
+
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function hideErr(id) { document.getElementById(id).classList.remove('show'); }
+
+function setBtn(id, loading, label) {
+  const b = document.getElementById(id);
+  b.disabled = loading;
+  b.textContent = loading ? 'Please wait\u2026' : label;
+}
+
+function logLine(msg, cls) {
+  const log  = document.getElementById('progress-log');
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = msg;
+  log.appendChild(span);
+  log.appendChild(document.createElement('br'));
+  log.scrollTop = log.scrollHeight;
+}
+
+async function post(action, data) {
+  const body = new URLSearchParams({ action, ...data });
+  const r = await fetch('api.php', { method: 'POST', body });
+  return r.json();
+}
+
+// ---------------------------------------------------------------------------
+// OTP input wiring — auto-advance, backspace, paste
+// ---------------------------------------------------------------------------
+function otpValue() {
+  return [0,1,2,3,4,5].map(i => document.getElementById('otp-' + i).value).join('');
+}
+
+function wireOtp() {
+  for (let i = 0; i < 6; i++) {
+    const box = document.getElementById('otp-' + i);
+
+    box.addEventListener('input', () => {
+      const v = box.value.replace(/\D/g, '');
+      box.value = v.slice(-1);
+      if (v && i < 5) document.getElementById('otp-' + (i + 1)).focus();
+      if (otpValue().length === 6) doTotp();
+    });
+
+    box.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !box.value && i > 0)
+        document.getElementById('otp-' + (i - 1)).focus();
+      if (e.key === 'Enter') doTotp();
+    });
+
+    box.addEventListener('paste', e => {
+      e.preventDefault();
+      const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g,'');
+      for (let j = 0; j < 6 && j < pasted.length; j++)
+        document.getElementById('otp-' + j).value = pasted[j];
+      document.getElementById('otp-' + Math.min(pasted.length - 1, 5)).focus();
+      if (pasted.length >= 6) setTimeout(doTotp, 80);
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 1: Login
+// ---------------------------------------------------------------------------
+function checkLoginReady() {
+  const phone = document.getElementById('phone').value.trim();
+  const pass  = document.getElementById('password').value.trim();
+  document.getElementById('btn-login').disabled = !(phone && pass);
+}
+
+async function doLogin() {
+  hideErr('login-err');
+  const local    = document.getElementById('phone').value.trim();
+  const phone    = local;  // country_code "2" is added server-side by qualid_login()
+  const password = document.getElementById('password').value.trim();
+  if (!local || !password) { showErr('login-err', 'Phone and password are required.'); return; }
+
+  setBtn('btn-login', true, 'Connect PBX');
+  try {
+    const res = await post('login', { phone, password });
+    if (!res.success) { showErr('login-err', res.error || 'Login failed.'); return; }
+
+    if (res.totp_required) {
+      _tempToken = res.temp_token;
+      showScreen('totp');
+    } else {
+      _token   = res.token;
+      _name    = res.name;
+      _company = res.company_name;
+      startActivation();
+    }
+  } catch(e) {
+    showErr('login-err', 'Network error \u2014 check your internet connection.');
+  } finally {
+    setBtn('btn-login', false, 'Connect PBX');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 1b: TOTP
+// ---------------------------------------------------------------------------
+async function doTotp() {
+  hideErr('totp-err');
+  const code = otpValue();
+  if (code.length !== 6) { showErr('totp-err', 'Enter the full 6-digit code.'); return; }
+
+  setBtn('btn-totp', true, 'Verify');
+  try {
+    const res = await post('verify_totp', { temp_token: _tempToken, code });
+    if (!res.success) {
+      showErr('totp-err', res.error || 'Invalid code \u2014 try again.');
+      [0,1,2,3,4,5].forEach(i => { document.getElementById('otp-' + i).value = ''; });
+      document.getElementById('otp-0').focus();
+      return;
+    }
+    _token   = res.token;
+    _name    = res.name;
+    _company = res.company_name;
+    startActivation();
+  } catch(e) {
+    showErr('totp-err', 'Network error \u2014 try again.');
+  } finally {
+    setBtn('btn-totp', false, 'Verify');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 2: Activate
+// ---------------------------------------------------------------------------
+async function startActivation() {
+  showScreen('activating');
+  document.getElementById('progress-log').innerHTML = '';
+
+  logLine('Provisioning SIP trunk\u2026');
+  try {
+    const res = await post('activate', { token: _token });
+
+    if (!res.success) {
+      logLine('\u2717 ' + (res.error || 'Activation failed.'), 'fail');
+      logLine('Go back and try again.', 'fail');
+      return;
+    }
+
+    logLine('\u2713 SIP trunk provisioned', 'ok');
+    logLine('\u2713 Asterisk config written', 'ok');
+    logLine('\u2713 Extensions and queues synced', 'ok');
+    logLine('\u2713 Sync timers enabled', 'ok');
+    logLine('\u2713 Asterisk reloaded', 'ok');
+
+    _name    = res.name         || _name;
+    _company = res.company_name || _company;
+
+    await new Promise(r => setTimeout(r, 1200));
+    showDone();
+  } catch(e) {
+    logLine('\u2717 Network error \u2014 check connection and retry.', 'fail');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 3: Done
+// ---------------------------------------------------------------------------
+function showDone() {
+  document.getElementById('done-name').textContent    = _name    || '\u2014';
+  document.getElementById('done-company').textContent = _company || '\u2014';
+  showScreen('done');
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+(async function init() {
+  wireOtp();
+
+  try {
+    const r = await fetch('api.php?action=status');
+    const j = await r.json();
+    if (j.activated) showScreen('already');
+  } catch(e) { /* show login normally */ }
+
+  document.getElementById('phone').addEventListener('input',    checkLoginReady);
+  document.getElementById('password').addEventListener('input', checkLoginReady);
+  document.getElementById('phone').addEventListener('keydown',    e => e.key === 'Enter' && doLogin());
+  document.getElementById('password').addEventListener('keydown', e => e.key === 'Enter' && doLogin());
+})();
+</script>
+</body>
+</html>
