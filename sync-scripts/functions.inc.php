@@ -933,6 +933,15 @@ function qualid_send_heartbeat($token) {
         ['Authorization: Bearer ' . $token]
     );
 
+    // If the cloud has a display_name set for this device (via dashboard), save it
+    // locally so active.html reflects the cloud-side name without manual re-entry.
+    if (isset($result['display_name']) && $result['display_name'] !== '') {
+        $local = qualid_get('display_name', '');
+        if ($local !== $result['display_name']) {
+            qualid_set('display_name', $result['display_name']);
+        }
+    }
+
     // If the cloud signals that changes were made via the dashboard (new extension,
     // delete, secret rotation, or manual "Sync Now"), trigger an immediate re-sync
     // in this same PHP run rather than waiting for the next timer tick.

@@ -326,15 +326,19 @@
 let _pollTimer = null;
 
 // ── device name ───────────────────────────────────────────────
-let _currentName = '';
+let _currentName   = '';
+let _defaultName   = '';  // company_name + " PBX" — shown as placeholder when no name saved
+let _hostnameHint  = '';  // last-resort edit pre-fill only
 
 async function loadDeviceName() {
   try {
     var r = await fetch('api.php?action=get_device_info');
     var d = await r.json();
     if (d.success) {
-      _currentName = d.display_name || '';
-      renderDeviceName(_currentName || d.hostname || '');
+      _currentName  = d.display_name  || '';
+      _defaultName  = d.company_name  ? d.company_name + ' PBX' : '';
+      _hostnameHint = d.hostname      || '';
+      renderDeviceName(_currentName);
     }
   } catch(e) {}
 }
@@ -345,7 +349,9 @@ function renderDeviceName(name) {
     display.textContent = name;
     display.classList.remove('unnamed');
   } else {
-    display.textContent = 'Unnamed device';
+    // Show "Acme PBX" (from company name) or "Unnamed device" as a muted placeholder.
+    // The .unnamed style signals this name is not saved yet.
+    display.textContent = _defaultName || 'Unnamed device';
     display.classList.add('unnamed');
   }
 }
@@ -354,9 +360,8 @@ function startEdit() {
   var display = document.getElementById('dn-display');
   var input   = document.getElementById('dn-input');
   var btn     = document.getElementById('dn-edit-btn');
-  // Pre-fill with saved name; fall back to whatever is visually displayed (e.g. hostname)
-  // but skip the placeholder text "Unnamed device"
-  input.value = _currentName || (display.classList.contains('unnamed') ? '' : display.textContent);
+  // Pre-fill: saved name → default (company PBX) → hostname fallback
+  input.value = _currentName || _defaultName || _hostnameHint;
   display.style.display = 'none';
   btn.style.display     = 'none';
   input.style.display   = 'inline-block';   // must be explicit — CSS default is display:none

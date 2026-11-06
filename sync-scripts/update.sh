@@ -100,7 +100,7 @@ fi
 tarball_url="https://github.com/${GITHUB_REPO}/releases/latest/download/qualid_pbx_os.tar.gz"
 tarball="${TMP_DIR}/qualid_pbx_os.tar.gz"
 
-log "Downloading ${tarball_url}..."
+log "Downloading update package..."
 curl -sfL --max-time 120 -o "${tarball}" "${tarball_url}" || {
     warn "Download failed — aborting update"
     watchdog

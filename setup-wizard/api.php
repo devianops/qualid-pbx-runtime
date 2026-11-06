@@ -200,8 +200,8 @@ if ($action === 'activate') {
 // ---------------------------------------------------------------------------
 if ($action === 'get_device_info') {
     ok([
-        'device_uuid'  => qualid_get_device_uuid(),
         'display_name' => qualid_get('display_name', ''),
+        'company_name' => qualid_get('company_name', ''),
         'hostname'     => gethostname(),
     ]);
 }
