@@ -302,4 +302,65 @@ if ($action === 'diagnose') {
     ok(['checks' => $checks]);
 }
 
+// ---------------------------------------------------------------------------
+// check_update — compare installed version with latest GitHub release
+// ---------------------------------------------------------------------------
+if ($action === 'check_update') {
+    $installed = trim((string)@file_get_contents('/etc/qualid/version')) ?: 'unknown';
+    $ctx = stream_context_create(['http' => ['header' => "User-Agent: qualid-pbx\r\n", 'timeout' => 6]]);
+    $relJson = @file_get_contents('https://api.github.com/repos/devianops/qualid-pbx-runtime/releases/latest', false, $ctx);
+    if (!$relJson) {
+        ok(['installed' => $installed, 'latest' => null, 'has_update' => false, 'offline' => true]);
+    }
+    $rel       = json_decode($relJson, true);
+    $latest    = ltrim($rel['tag_name'] ?? '', 'v');
+    $hasUpdate = ($latest && $installed !== 'unknown' && version_compare($latest, $installed, '>'));
+    ok(['installed' => $installed, 'latest' => $latest ?: null, 'has_update' => $hasUpdate]);
+}
+
+// ---------------------------------------------------------------------------
+// run_update — trigger qualid-updater.service (runs update.sh as root)
+// ---------------------------------------------------------------------------
+if ($action === 'run_update') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail('POST required.', 405);
+    // Write a start-time marker so update_status can distinguish "not started"
+    // from "just finished". Clear any previous log.
+    file_put_contents('/tmp/qualid-update-started', time() . "\n");
+    @unlink('/tmp/qualid-update.log');
+    // systemctl start is blocking for a oneshot service, so background it.
+    shell_exec('sudo /bin/systemctl start qualid-updater.service > /tmp/qualid-update.log 2>&1 &');
+    ok(['started' => true]);
+}
+
+// ---------------------------------------------------------------------------
+// update_status — is the updater running? what version are we on?
+// ---------------------------------------------------------------------------
+if ($action === 'update_status') {
+    $startedAt = (int)trim((string)@file_get_contents('/tmp/qualid-update-started'));
+    $state     = trim((string)shell_exec('/usr/bin/systemctl is-active qualid-updater.service 2>/dev/null'));
+    $version   = trim((string)@file_get_contents('/etc/qualid/version')) ?: 'unknown';
+
+    // Grace period: service may still be spinning up for the first 15 s after
+    // run_update was called — treat it as "running" to avoid a false "done".
+    $running = ($state === 'activating')
+            || ($startedAt > 0 && $state === 'inactive' && (time() - $startedAt) < 15);
+    $failed  = ($state === 'failed');
+    $done    = ($startedAt > 0 && !$running && !$failed);
+
+    $log      = (string)@file_get_contents('/tmp/qualid-update.log');
+    $logLines = $log
+        ? array_values(array_filter(array_slice(explode("\n", trim($log)), -20)))
+        : [];
+
+    ok([
+        'running'    => $running,
+        'done'       => $done,
+        'failed'     => $failed,
+        'state'      => $state,
+        'version'    => $version,
+        'log'        => $logLines,
+        'started_at' => $startedAt,
+    ]);
+}
+
 fail('Unknown action.', 400);

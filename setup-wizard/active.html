@@ -18,6 +18,7 @@
     --text:      #1a2535;
     --muted:     #64748b;
     --success:   #16a394;
+    --fail:      #dc2626;
     --radius:    14px;
     --radius-sm: 9px;
   }
@@ -144,6 +145,73 @@
     animation: pulse-dot 2s ease infinite;
     flex-shrink: 0;
   }
+
+  /* ── Update section ──────────────────────────────────────── */
+  .update-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .update-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+    min-height: 28px;
+  }
+  .upd-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(217,119,6,.08);
+    border: 1px solid rgba(217,119,6,.25);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 11px;
+    color: #d97706;
+    font-weight: 600;
+  }
+  .btn-upd {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+    flex-shrink: 0;
+  }
+  .btn-upd:hover { background: var(--accent-dk); }
+  .btn-upd:disabled { opacity: .5; cursor: default; }
+  .upd-spinner {
+    width: 13px; height: 13px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .upd-log {
+    margin-top: 10px;
+    background: #1a2535;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    color: #94a3b8;
+    max-height: 110px;
+    overflow-y: auto;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
 </style>
 </head>
 <body>
@@ -183,8 +251,141 @@
         &#9881; Diagnostics
       </a>
     </div>
+
+    <!-- Update section — populated by JS on load -->
+    <div class="update-section" id="upd-section" style="display:none">
+      <div class="update-row" id="upd-row">
+        <span style="color:var(--muted)">Checking for updates&hellip;</span>
+      </div>
+      <div class="upd-log" id="upd-log" style="display:none"></div>
+    </div>
   </div>
 
 </div>
+
+<script>
+let _pollTimer = null;
+
+// ── helpers ───────────────────────────────────────────────────
+function setUpdRow(html) {
+  document.getElementById('upd-row').innerHTML = html;
+}
+function showSection() {
+  document.getElementById('upd-section').style.display = '';
+}
+
+// ── states ────────────────────────────────────────────────────
+function showChecking() {
+  showSection();
+  setUpdRow('<span style="color:var(--muted)">Checking for updates&hellip;</span>');
+}
+function showUpToDate(ver) {
+  showSection();
+  setUpdRow(
+    '<span style="font-size:12px;color:var(--muted)">Version <strong style="color:var(--text)">v' + esc(ver) + '</strong></span>' +
+    '<span style="font-size:11px;color:var(--success);font-weight:600">&#10003;&nbsp;Up&nbsp;to&nbsp;date</span>'
+  );
+}
+function showAvailable(cur, next) {
+  showSection();
+  setUpdRow(
+    '<div style="display:flex;align-items:center;gap:6px;font-size:12px">' +
+      '<span style="color:var(--muted)">v' + esc(cur) + '</span>' +
+      '<span style="color:var(--muted)">&#8594;</span>' +
+      '<span class="upd-badge">v' + esc(next) + ' available</span>' +
+    '</div>' +
+    '<button class="btn-upd" onclick="doUpdate(\'' + esc(next) + '\')">&#8593; Update</button>'
+  );
+}
+function showUpdating(next) {
+  setUpdRow(
+    '<span style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">' +
+      '<span class="upd-spinner"></span>Updating to v' + esc(next) + '&hellip;</span>'
+  );
+}
+function showDone(ver) {
+  setUpdRow('<span style="color:var(--success);font-size:12px;font-weight:600">&#10003; Updated to v' + esc(ver) + ' &mdash; reloading&hellip;</span>');
+  setTimeout(function(){ location.reload(); }, 3000);
+}
+function showFailed() {
+  setUpdRow('<span style="color:var(--fail);font-size:12px;font-weight:600">&#10005; Update failed &mdash; see log below</span>');
+}
+
+// ── update flow ───────────────────────────────────────────────
+async function doUpdate(next) {
+  showSection();
+  showUpdating(next);
+  var log = document.getElementById('upd-log');
+  log.style.display = '';
+  log.textContent   = 'Starting updater\u2026\n';
+
+  try { await fetch('api.php?action=run_update', {method:'POST'}); } catch(e){}
+
+  if (_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(pollUpdate, 2500);
+}
+
+async function pollUpdate() {
+  try {
+    var r = await fetch('api.php?action=update_status');
+    var d = await r.json();
+    if (!d.success) return;
+
+    var log = document.getElementById('upd-log');
+    if (d.log && d.log.length) {
+      log.style.display = '';
+      log.textContent   = d.log.join('\n');
+      log.scrollTop     = log.scrollHeight;
+    }
+
+    if (d.running) return; // still running (or in 15 s grace period)
+
+    clearInterval(_pollTimer); _pollTimer = null;
+
+    if (d.failed)     { showFailed(); return; }
+    if (d.done)       { showDone(d.version); return; }
+    // neither — no update was in flight; fall back to a fresh check
+    checkUpdate();
+  } catch(e){}
+}
+
+// ── check for available update ────────────────────────────────
+async function checkUpdate() {
+  showChecking();
+  try {
+    var r = await fetch('api.php?action=check_update');
+    var d = await r.json();
+    if (!d.success) { showSection(); setUpdRow('<span style="color:var(--muted);font-size:12px">Could not check for updates</span>'); return; }
+    if (d.offline)  { showSection(); setUpdRow('<span style="color:var(--muted);font-size:12px">Offline &mdash; cannot check for updates</span>'); return; }
+    if (d.has_update) { showAvailable(d.installed, d.latest); return; }
+    showUpToDate(d.installed || 'unknown');
+  } catch(e) {
+    showSection();
+    setUpdRow('<span style="color:var(--muted);font-size:12px">Could not check for updates</span>');
+  }
+}
+
+// ── escape helper ─────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── on load: check if an update is already in progress ────────
+(async function init() {
+  try {
+    var r = await fetch('api.php?action=update_status');
+    var d = await r.json();
+    if (d.success && d.running) {
+      showSection();
+      setUpdRow('<span style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)"><span class="upd-spinner"></span>Update in progress&hellip;</span>');
+      var log = document.getElementById('upd-log');
+      if (d.log && d.log.length) { log.style.display=''; log.textContent=d.log.join('\n'); }
+      _pollTimer = setInterval(pollUpdate, 2500);
+      return;
+    }
+  } catch(e){}
+  checkUpdate();
+})();
+</script>
 </body>
 </html>

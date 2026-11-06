@@ -219,6 +219,7 @@ www-data ALL=(root) NOPASSWD: /bin/systemctl enable --now qualid-sync.timer
 www-data ALL=(root) NOPASSWD: /bin/systemctl enable qualid-updater.timer
 www-data ALL=(root) NOPASSWD: /bin/systemctl start  qualid-updater.timer
 www-data ALL=(root) NOPASSWD: /bin/systemctl enable --now qualid-updater.timer
+www-data ALL=(root) NOPASSWD: /bin/systemctl start  qualid-updater.service
 www-data ALL=(root) NOPASSWD: /bin/systemctl reload nginx
 www-data ALL=(root) NOPASSWD: /bin/cp /usr/share/qualid/setup-wizard/nginx-active.conf /etc/nginx/sites-available/qualid
 www-data ALL=(root) NOPASSWD: /usr/sbin/asterisk
