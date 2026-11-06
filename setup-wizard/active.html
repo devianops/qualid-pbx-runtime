@@ -128,58 +128,28 @@
   .info-box strong { color: var(--text); }
 
   /* ── Device name ─────────────────────────────────────────── */
-  .device-name-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin-bottom: 16px;
+  .device-name-block {
+    margin-bottom: 20px;
+  }
+  .device-name-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
   }
   .device-name-display {
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 16px;
+    font-weight: 700;
     color: var(--text);
-    cursor: pointer;
-    border-bottom: 1px dashed transparent;
-    transition: border-color .15s;
-    max-width: 240px;
+    max-width: 300px;
+    margin: 0 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .device-name-display:hover { border-bottom-color: var(--accent); }
   .device-name-display.unnamed { color: var(--muted); font-weight: 400; font-style: italic; }
-  .device-name-input {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text);
-    border: 1px solid var(--accent);
-    border-radius: 6px;
-    padding: 3px 8px;
-    outline: none;
-    width: 200px;
-    background: var(--bg2);
-    display: none;
-  }
-  .edit-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 13px;
-    padding: 2px 4px;
-    border-radius: 4px;
-    transition: color .15s;
-    line-height: 1;
-  }
-  .edit-btn:hover { color: var(--accent); }
-  .save-indicator {
-    font-size: 11px;
-    color: var(--success);
-    font-weight: 600;
-    opacity: 0;
-    transition: opacity .3s;
-  }
 
   .sync-row {
     display: flex;
@@ -280,14 +250,10 @@
     <div class="done-icon">&#10003;</div>
     <h2>Quali-D PBX is Active</h2>
 
-    <!-- Device name — editable inline -->
-    <div class="device-name-row">
-      <span id="dn-display" class="device-name-display unnamed" onclick="startEdit()">Unnamed device</span>
-      <input id="dn-input" class="device-name-input" type="text" maxlength="100"
-             placeholder="e.g. Office 1"
-             onblur="saveDeviceName()" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape')cancelEdit()">
-      <button class="edit-btn" id="dn-edit-btn" onclick="startEdit()" title="Rename device">&#9998;</button>
-      <span class="save-indicator" id="dn-saved">&#10003; saved</span>
+    <!-- Device name — read-only, managed from the Quali-D dashboard -->
+    <div class="device-name-block">
+      <div class="device-name-label">PBX Device Name</div>
+      <div id="dn-display" class="device-name-display unnamed">—</div>
     </div>
 
     <p class="subtitle">This PBX is connected to the Quali-D cloud and syncing automatically.</p>
@@ -325,82 +291,30 @@
 <script>
 let _pollTimer = null;
 
-// ── device name ───────────────────────────────────────────────
-let _currentName   = '';
-let _defaultName   = '';  // company_name + " PBX" — shown as placeholder when no name saved
-let _hostnameHint  = '';  // last-resort edit pre-fill only
-
+// ── device name (read-only — managed from the Quali-D dashboard) ──────────────
 async function loadDeviceName() {
   try {
     var r = await fetch('api.php?action=get_device_info');
     var d = await r.json();
     if (d.success) {
-      _currentName  = d.display_name  || '';
-      _defaultName  = d.company_name  ? d.company_name + ' PBX' : '';
-      _hostnameHint = d.hostname      || '';
-      renderDeviceName(_currentName);
+      var name        = d.display_name || '';
+      var defaultName = d.company_name ? d.company_name + ' PBX' : '';
+      renderDeviceName(name, defaultName);
     }
   } catch(e) {}
 }
 
-function renderDeviceName(name) {
+function renderDeviceName(name, defaultName) {
   var display = document.getElementById('dn-display');
   if (name) {
     display.textContent = name;
     display.classList.remove('unnamed');
   } else {
-    // Show "Acme PBX" (from company name) or "Unnamed device" as a muted placeholder.
-    // The .unnamed style signals this name is not saved yet.
-    display.textContent = _defaultName || 'Unnamed device';
+    // Show "Acme PBX" (from company name) or a plain dash as placeholder.
+    // .unnamed style (muted italic) signals no name has been set yet.
+    display.textContent = defaultName || '—';
     display.classList.add('unnamed');
   }
-}
-
-function startEdit() {
-  var display = document.getElementById('dn-display');
-  var input   = document.getElementById('dn-input');
-  var btn     = document.getElementById('dn-edit-btn');
-  // Pre-fill: saved name → default (company PBX) → hostname fallback
-  input.value = _currentName || _defaultName || _hostnameHint;
-  display.style.display = 'none';
-  btn.style.display     = 'none';
-  input.style.display   = 'inline-block';   // must be explicit — CSS default is display:none
-  input.focus();
-  input.select();
-}
-
-function cancelEdit() {
-  var display = document.getElementById('dn-display');
-  var input   = document.getElementById('dn-input');
-  var btn     = document.getElementById('dn-edit-btn');
-  input.style.display   = 'none';
-  display.style.display = '';
-  btn.style.display     = '';
-}
-
-async function saveDeviceName() {
-  var input   = document.getElementById('dn-input');
-  var display = document.getElementById('dn-display');
-  var btn     = document.getElementById('dn-edit-btn');
-  var saved   = document.getElementById('dn-saved');
-  var name    = input.value.trim();
-
-  cancelEdit();
-
-  if (!name || name === _currentName) return;
-
-  try {
-    var fd = new FormData();
-    fd.append('display_name', name);
-    var r = await fetch('api.php?action=set_device_name', { method: 'POST', body: fd });
-    var d = await r.json();
-    if (d.success) {
-      _currentName = name;
-      renderDeviceName(name);
-      saved.style.opacity = '1';
-      setTimeout(function(){ saved.style.opacity = '0'; }, 2000);
-    }
-  } catch(e) {}
 }
 
 // ── helpers ───────────────────────────────────────────────────
