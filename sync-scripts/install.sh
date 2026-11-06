@@ -146,6 +146,7 @@ if [[ -d "${WIZARD_SRC}" ]]; then
     if [ "${SCRIPT_DIR}" != "${QUALID_DIR}/sync-scripts" ]; then
         cp -f "${WIZARD_SRC}/index.html"         "${WIZARD_DST}/"
         cp -f "${WIZARD_SRC}/active.html"        "${WIZARD_DST}/"
+        cp -f "${WIZARD_SRC}/diagnose.html"      "${WIZARD_DST}/"
         cp -f "${WIZARD_SRC}/api.php"            "${WIZARD_DST}/"
         cp -f "${WIZARD_SRC}/nginx-wizard.conf"  "${WIZARD_DST}/"
         cp -f "${WIZARD_SRC}/nginx-active.conf"  "${WIZARD_DST}/"
