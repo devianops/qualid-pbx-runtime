@@ -20,8 +20,10 @@ TimeoutStartSec=600
 # ---------------------------------------------------------------------------
 NoNewPrivileges=yes
 PrivateTmp=yes
-# ProtectSystem=strict would block writing to /usr/share — use 'full' instead
-ProtectSystem=full
+# ProtectSystem=strict blocks /usr/share; full blocks all of /etc (breaks install.sh
+# which must update /etc/php, /etc/sudoers.d etc.).  Use 'yes' — protects /usr and
+# /boot but leaves /etc writable for root so install.sh can run cleanly.
+ProtectSystem=yes
 ProtectHome=yes
 ReadWritePaths=/usr/share/qualid /etc/qualid /etc/asterisk /etc/systemd/system \
                /var/lib/asterisk/agi-bin /tmp

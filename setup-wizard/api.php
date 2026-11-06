@@ -324,11 +324,12 @@ if ($action === 'check_update') {
 if ($action === 'run_update') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail('POST required.', 405);
     // Write a start-time marker so update_status can distinguish "not started"
-    // from "just finished". Clear any previous log.
+    // from "just finished". update.sh clears /etc/qualid/update.log on its own.
     file_put_contents('/tmp/qualid-update-started', time() . "\n");
-    @unlink('/tmp/qualid-update.log');
     // systemctl start is blocking for a oneshot service, so background it.
-    shell_exec('sudo /bin/systemctl start qualid-updater.service > /tmp/qualid-update.log 2>&1 &');
+    // Note: service stdout goes to journal; actual progress is in /etc/qualid/update.log
+    // written by update.sh itself (PrivateTmp isolates the service's /tmp from ours).
+    shell_exec('sudo /bin/systemctl start qualid-updater.service 2>/dev/null &');
     ok(['started' => true]);
 }
 
@@ -347,7 +348,9 @@ if ($action === 'update_status') {
     $failed  = ($state === 'failed');
     $done    = ($startedAt > 0 && !$running && !$failed);
 
-    $log      = (string)@file_get_contents('/tmp/qualid-update.log');
+    // update.sh writes its log to /etc/qualid/update.log (writable by root, readable
+    // by www-data since /etc/qualid is chowned to www-data during install).
+    $log      = (string)@file_get_contents('/etc/qualid/update.log');
     $logLines = $log
         ? array_values(array_filter(array_slice(explode("\n", trim($log)), -20)))
         : [];

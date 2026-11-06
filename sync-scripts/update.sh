@@ -18,9 +18,14 @@ GITHUB_REPO="devianops/qualid-pbx-runtime"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 TMP_DIR=$(mktemp -d /tmp/qualid-update.XXXXXX)
 LOG_TAG="qualid-updater"
+# Log file in /etc/qualid/ — accessible to www-data (owned by www-data) so the
+# web UI can display live progress.  /tmp is a private tmpfs inside the service.
+LOG_FILE="${CONFIG_DIR}/update.log"
+> "${LOG_FILE}" 2>/dev/null || true
+chmod 644 "${LOG_FILE}" 2>/dev/null || true
 
-log()  { logger -t "${LOG_TAG}" "$*"; echo "$*"; }
-warn() { logger -t "${LOG_TAG}" "WARN: $*"; echo "WARN: $*" >&2; }
+log()  { logger -t "${LOG_TAG}" "$*"; echo "$*" | tee -a "${LOG_FILE}"; }
+warn() { logger -t "${LOG_TAG}" "WARN: $*"; echo "WARN: $*" | tee -a "${LOG_FILE}" >&2; }
 
 # ---------------------------------------------------------------------------
 # Offline watchdog — always runs regardless of update availability
