@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quali-D PBX &mdash; Diagnostics</title>
+<link rel="icon" type="image/png" href="Icon.png">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f4f7fb;
+    --panel:     #ffffff;
+    --bg2:       #f8fafc;
+    --border:    #e2e8f0;
+    --accent:    #2fc4b5;
+    --accent-dk: #1a8f84;
+    --text:      #1a2535;
+    --muted:     #64748b;
+    --ok:        #16a394;
+    --ok-bg:     rgba(22,163,148,.08);
+    --ok-border: rgba(22,163,148,.25);
+    --warn:      #d97706;
+    --warn-bg:   rgba(217,119,6,.08);
+    --warn-border:rgba(217,119,6,.25);
+    --fail:      #dc2626;
+    --fail-bg:   rgba(220,38,38,.08);
+    --fail-border:rgba(220,38,38,.25);
+    --radius:    14px;
+    --radius-sm: 9px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 32px 20px 48px;
+  }
+
+  .page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
+    max-width: 560px;
+  }
+
+  .logo img {
+    height: 80px;
+    width: auto;
+    display: block;
+    opacity: .85;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    padding: 28px 28px 24px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.07), 0 1px 4px rgba(0,0,0,.04);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .card-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -.1px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+    text-decoration: none;
+  }
+  .btn:hover { background: var(--accent-dk); }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Spinner */
+  .spinner-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 32px 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Summary bar */
+  .summary {
+    display: flex;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    flex-wrap: wrap;
+  }
+  .summary-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .summary-pill.ok   { background: var(--ok-bg);   color: var(--ok);   border: 1px solid var(--ok-border); }
+  .summary-pill.warn { background: var(--warn-bg);  color: var(--warn); border: 1px solid var(--warn-border); }
+  .summary-pill.fail { background: var(--fail-bg);  color: var(--fail); border: 1px solid var(--fail-border); }
+
+  /* Check rows */
+  .checks { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+
+  .check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+  }
+  .check-row.ok   { background: var(--ok-bg);   border-color: var(--ok-border); }
+  .check-row.warn { background: var(--warn-bg);  border-color: var(--warn-border); }
+  .check-row.fail { background: var(--fail-bg);  border-color: var(--fail-border); }
+
+  .check-icon {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .ok   .check-icon { background: var(--ok);   color: #fff; }
+  .warn .check-icon { background: var(--warn);  color: #fff; }
+  .fail .check-icon { background: var(--fail);  color: #fff; }
+
+  .check-body { flex: 1; min-width: 0; }
+  .check-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .check-detail {
+    font-size: 12px;
+    color: var(--muted);
+    word-break: break-word;
+  }
+  .check-row.fail .check-detail { color: var(--fail); }
+
+  .footer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 12px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="logo">
+    <img src="QualiD_PBX_Logo.png" alt="Quali-D PBX" onerror="this.style.display='none'">
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">System Diagnostics</span>
+      <button class="btn" id="btn-run" onclick="runDiagnostics()">&#9654; Run</button>
+    </div>
+
+    <div id="result">
+      <div class="spinner-wrap">
+        <div class="spinner"></div>
+        Running diagnostics&hellip;
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-row">
+    <a href="/" class="btn-ghost">&#8592; Back</a>
+    <span id="last-run"></span>
+  </div>
+
+</div>
+
+<script>
+const ICONS = { ok: '&#10003;', warn: '&#9888;', fail: '&#10005;' };
+const LABELS = { ok: 'OK', warn: 'Warning', fail: 'Failed' };
+
+async function runDiagnostics() {
+  const btn = document.getElementById('btn-run');
+  const result = document.getElementById('result');
+  btn.disabled = true;
+  result.innerHTML = `
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+      Running diagnostics&hellip;
+    </div>`;
+
+  try {
+    const res  = await fetch('api.php?action=diagnose');
+    const data = await res.json();
+
+    if (!data.success || !data.checks) {
+      result.innerHTML = `<p style="color:var(--fail);font-size:13px;padding:16px 0">Error: ${data.error || 'Unknown error'}</p>`;
+      return;
+    }
+
+    const checks = data.checks;
+    const counts = { ok: 0, warn: 0, fail: 0 };
+    checks.forEach(c => counts[c.status] = (counts[c.status] || 0) + 1);
+
+    const summaryHtml = ['ok','warn','fail']
+      .filter(s => counts[s] > 0)
+      .map(s => `<span class="summary-pill ${s}">${ICONS[s]} ${counts[s]} ${LABELS[s]}</span>`)
+      .join('');
+
+    const rowsHtml = checks.map(c => `
+      <div class="check-row ${c.status}">
+        <div class="check-icon">${ICONS[c.status]}</div>
+        <div class="check-body">
+          <div class="check-label">${esc(c.label)}</div>
+          <div class="check-detail">${esc(c.detail)}</div>
+        </div>
+      </div>`).join('');
+
+    result.innerHTML = `
+      <div class="summary">${summaryHtml}</div>
+      <div class="checks">${rowsHtml}</div>`;
+
+    document.getElementById('last-run').textContent = 'Last run: ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    result.innerHTML = `<p style="color:var(--fail);font-size:13px;padding:16px 0">Could not reach api.php — is PHP enabled in nginx?</p>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Auto-run on load
+runDiagnostics();
+</script>
+</body>
+</html>

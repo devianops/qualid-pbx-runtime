@@ -191,4 +191,115 @@ if ($action === 'activate') {
     ]);
 }
 
+// ---------------------------------------------------------------------------
+// diagnose — system health checklist (GET-safe, available post-activation)
+// ---------------------------------------------------------------------------
+if ($action === 'diagnose') {
+    $checks = [];
+
+    function chk(string $id, string $label, string $status, string $detail): array {
+        return compact('id', 'label', 'status', 'detail');
+    }
+
+    function ast(string $cmd): string {
+        return trim((string) shell_exec('sudo /usr/sbin/asterisk -rx ' . escapeshellarg($cmd) . ' 2>/dev/null'));
+    }
+
+    function svc(string $unit): string {
+        return trim((string) shell_exec('/usr/bin/systemctl is-active ' . escapeshellarg($unit) . ' 2>/dev/null'));
+    }
+
+    // 1. Config file
+    $configFile = '/etc/qualid/config.json';
+    $config = file_exists($configFile) ? (json_decode((string)file_get_contents($configFile), true) ?: []) : [];
+    $checks[] = file_exists($configFile)
+        ? chk('config', 'Config file present', 'ok', $configFile)
+        : chk('config', 'Config file present', 'fail', 'Missing — PBX may not be provisioned');
+
+    // 2. Asterisk running
+    $asteriskOut = ast('core show version');
+    $checks[] = (strpos($asteriskOut, 'Asterisk') !== false)
+        ? chk('asterisk', 'Asterisk running', 'ok', strtok($asteriskOut, "\n"))
+        : chk('asterisk', 'Asterisk running', 'fail', 'Not responding — may need: systemctl restart asterisk');
+
+    // 3. Sync timer (every 1 min)
+    $syncState = svc('qualid-sync.timer');
+    $checks[] = chk('sync_timer', 'Sync timer (every 1 min)', $syncState === 'active' ? 'ok' : 'fail',
+        $syncState === 'active' ? 'active' : 'inactive — run: systemctl enable --now qualid-sync.timer');
+
+    // 4. Updater timer (hourly)
+    $updaterState = svc('qualid-updater.timer');
+    $checks[] = chk('updater_timer', 'Updater timer (hourly)', $updaterState === 'active' ? 'ok' : 'warn',
+        $updaterState === 'active' ? 'active' : 'inactive — run: systemctl enable --now qualid-updater.timer');
+
+    // 5. PJSIP extensions config written
+    $pjsipConf = '/etc/asterisk/pjsip_qualid_extensions.conf';
+    if (file_exists($pjsipConf)) {
+        preg_match_all('/^type=endpoint/m', (string)file_get_contents($pjsipConf), $m);
+        $n = count($m[0]);
+        $checks[] = chk('pjsip_conf', 'PJSIP extensions config', $n > 0 ? 'ok' : 'warn',
+            $n . ' local endpoint(s) written' . ($n === 0 ? ' — no local extensions synced yet' : ''));
+    } else {
+        $checks[] = chk('pjsip_conf', 'PJSIP extensions config', 'warn',
+            'Not written yet — no local extensions or sync not run');
+    }
+
+    // 6. Queue config written
+    $queueConf = '/etc/asterisk/queues_qualid.conf';
+    if (file_exists($queueConf)) {
+        preg_match_all('/^\[[0-9]+\]/m', (string)file_get_contents($queueConf), $m);
+        $n = count($m[0]);
+        $checks[] = chk('queue_conf', 'Queue config', $n > 0 ? 'ok' : 'warn',
+            $n . ' queue(s) written' . ($n === 0 ? ' — no queues configured yet' : ''));
+    } else {
+        $checks[] = chk('queue_conf', 'Queue config', 'warn', 'Not written yet — no queues configured');
+    }
+
+    // 7. PJSIP endpoints loaded in Asterisk
+    $epOut = ast('pjsip show endpoints');
+    if (preg_match('/Objects found:\s*(\d+)/i', $epOut, $m)) {
+        $n = (int)$m[1];
+        $checks[] = chk('endpoints', 'PJSIP endpoints loaded', $n > 0 ? 'ok' : 'warn',
+            $n . ' endpoint(s) in Asterisk (includes trunk)');
+    } else {
+        $checks[] = chk('endpoints', 'PJSIP endpoints loaded', 'fail', 'Could not query Asterisk');
+    }
+
+    // 8. Cloud VPS trunk reachable
+    $trunkOut = ast('pjsip show aors');
+    if (strpos($trunkOut, 'Avail') !== false) {
+        preg_match('/(\d+\.\d+)\s*$/', preg_replace('/\s+/', ' ', $trunkOut), $m);
+        $rtt = isset($m[1]) ? ' — RTT ' . $m[1] . ' ms' : '';
+        $checks[] = chk('trunk', 'Cloud VPS trunk', 'ok', 'Available' . $rtt);
+    } elseif (strpos($trunkOut, 'QualidRemote') !== false) {
+        $checks[] = chk('trunk', 'Cloud VPS trunk', 'fail', 'Registered but not responding — check VPS/Kamailio');
+    } else {
+        $checks[] = chk('trunk', 'Cloud VPS trunk', 'fail', 'Not found — check pjsip_qualid.conf');
+    }
+
+    // 9. Queue members in Asterisk
+    $queueOut = ast('queue show');
+    preg_match_all('/Members:\s*\n((?:\s+.+\n)*)/i', $queueOut, $m);
+    $memberCount = 0;
+    foreach ($m[1] as $block) { $memberCount += preg_match_all('/\(/', $block); }
+    $hasQueues = strpos($queueOut, 'has') !== false;
+    $checks[] = $hasQueues
+        ? chk('queue_members', 'Queue members in Asterisk', $memberCount > 0 ? 'ok' : 'warn',
+            $memberCount . ' member(s) across all queues')
+        : chk('queue_members', 'Queue members in Asterisk', 'warn', 'No queues loaded — check queues_qualid.conf');
+
+    // 10. Version vs latest release
+    $installed = trim((string)@file_get_contents('/etc/qualid/version')) ?: 'unknown';
+    $ctx = stream_context_create(['http' => ['header' => "User-Agent: qualid-pbx\r\n", 'timeout' => 5]]);
+    $relJson = @file_get_contents('https://api.github.com/repos/devianops/qualid-pbx-runtime/releases/latest', false, $ctx);
+    $latest = 'unknown';
+    if ($relJson) { $rel = json_decode($relJson, true); $latest = ltrim($rel['tag_name'] ?? 'unknown', 'v'); }
+    $upToDate = ($installed !== 'unknown' && $installed === $latest);
+    $checks[] = chk('version', 'Runtime version',
+        $latest === 'unknown' ? 'warn' : ($upToDate ? 'ok' : 'warn'),
+        'Installed: v' . $installed . ' — Latest: v' . $latest . ($upToDate ? '' : ' (update available — will auto-apply within 1 hour)'));
+
+    ok(['checks' => $checks]);
+}
+
 fail('Unknown action.', 400);

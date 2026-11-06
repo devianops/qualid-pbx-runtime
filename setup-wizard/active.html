@@ -162,12 +162,26 @@
     <div class="info-box">
       Manage <strong>extensions</strong>, <strong>queues</strong>, and <strong>IVR flows</strong>
       from the <strong>Quali-D web portal</strong> &mdash; changes sync to this PBX automatically
-      every 5 minutes.
+      every minute.
     </div>
 
     <div class="sync-row">
       <span class="sync-dot"></span>
-      Syncing with cloud every 5 minutes
+      Syncing with cloud every minute
+    </div>
+
+    <div style="margin-top:20px;text-align:center">
+      <a href="diagnose.html" style="
+        display:inline-flex;align-items:center;gap:6px;
+        font-size:12px;font-weight:600;color:var(--muted);
+        text-decoration:none;
+        border:1px solid var(--border);border-radius:8px;
+        padding:7px 16px;
+        transition:border-color .15s,color .15s;
+      " onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+         onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+        &#9881; Diagnostics
+      </a>
     </div>
   </div>
 
