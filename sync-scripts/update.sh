@@ -90,6 +90,8 @@ fi
 # ---------------------------------------------------------------------------
 # 4. Download and extract the release tarball
 # ---------------------------------------------------------------------------
+# Asset is uploaded as qualid_pbx_os.tar.gz — a stable name so this URL never
+# needs to change regardless of the version tag.
 tarball_url="https://github.com/${GITHUB_REPO}/releases/latest/download/qualid_pbx_os.tar.gz"
 tarball="${TMP_DIR}/qualid_pbx_os.tar.gz"
 
@@ -109,9 +111,11 @@ tar -xzf "${tarball}" -C "${TMP_DIR}" || {
 # ---------------------------------------------------------------------------
 # 5. Run install.sh from the extracted payload
 # ---------------------------------------------------------------------------
-install_sh="${TMP_DIR}/install.sh"
+# The tarball contains a top-level qualid-pbx-runtime/ directory; install.sh
+# lives under sync-scripts/ inside it.
+install_sh="${TMP_DIR}/qualid-pbx-runtime/sync-scripts/install.sh"
 if [[ ! -f "${install_sh}" ]]; then
-    warn "No install.sh in release tarball — aborting"
+    warn "No install.sh found in release tarball (expected: ${install_sh}) — aborting"
     watchdog
     exit 1
 fi
