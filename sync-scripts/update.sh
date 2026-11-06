@@ -126,7 +126,7 @@ if [[ ! -f "${install_sh}" ]]; then
 fi
 
 chmod +x "${install_sh}"
-log "Running install.sh for version ${latest_version}..."
+log "Installing version ${latest_version}..."
 bash "${install_sh}" "${latest_version}" || {
     warn "install.sh exited with error — rollback may be needed"
     watchdog
