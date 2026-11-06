@@ -354,10 +354,12 @@ function startEdit() {
   var display = document.getElementById('dn-display');
   var input   = document.getElementById('dn-input');
   var btn     = document.getElementById('dn-edit-btn');
-  input.value = _currentName;
+  // Pre-fill with saved name; fall back to whatever is visually displayed (e.g. hostname)
+  // but skip the placeholder text "Unnamed device"
+  input.value = _currentName || (display.classList.contains('unnamed') ? '' : display.textContent);
   display.style.display = 'none';
   btn.style.display     = 'none';
-  input.style.display   = '';
+  input.style.display   = 'inline-block';   // must be explicit — CSS default is display:none
   input.focus();
   input.select();
 }
