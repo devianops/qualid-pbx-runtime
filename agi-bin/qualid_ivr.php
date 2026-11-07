@@ -141,6 +141,16 @@ function convert_to_wav($mp3_file) {
 agi('ANSWER');
 agi('SET VARIABLE CHANNEL_ANSWERED 1');
 
+// ─ Start recording ───────────────────────────────────────────────────────────
+$_uniq_resp = agi('GET VARIABLE UNIQUEID');
+$_uniqueid  = '';
+if (preg_match('/\(([^)]+)\)/', $_uniq_resp, $_um)) {
+    $_uniqueid = preg_replace('/[^a-zA-Z0-9._-]/', '_', $_um[1]);
+}
+if (!$_uniqueid) { $_uniqueid = 'inb_' . time() . '_' . rand(1000, 9999); }
+$rec_file = '/tmp/qualid_rec_' . $_uniqueid;
+agi("EXEC MixMonitor {$rec_file}.wav,b");
+
 // ─ Start session ─────────────────────────────────────────────────────────────
 $start_resp = api_post('/ivr/agi/start', [
     'caller_id' => $caller_id,
@@ -474,6 +484,14 @@ if ($session_id) {
         'session_id'   => $session_id,
         'hangup_cause' => $hangup_cause,
     ]);
+}
+
+// ─ Drop recording sidecar for runtime sync ───────────────────────────────────
+if ($session_id && isset($rec_file)) {
+    file_put_contents($rec_file . '.json', json_encode([
+        'session_id' => $session_id,
+        'call_type'  => 'inbound',
+    ]));
 }
 
 agi('HANGUP');

@@ -2144,3 +2144,75 @@ function qualid_sync_trunks($token) {
     }
     return array_merge($result, ['tried' => $tried, 'found' => count($trunks)]);
 }
+
+// ── Call Recordings ───────────────────────────────────────────────────────────
+/**
+ * Pick up completed MixMonitor recordings from /tmp and upload them to the
+ * QUALI-D backend (which stores them in Backblaze B2).
+ *
+ * AGI scripts write a .json sidecar alongside every .wav file. This function:
+ *   1. Finds all /tmp/qualid_rec_*.json files
+ *   2. Skips any whose matching .wav was modified less than 60 s ago (still recording)
+ *   3. Skips trivially small files (silence / failed recordings)
+ *   4. POSTs the .wav + metadata to /ivr/agi/recording-upload
+ *   5. Deletes both files on success
+ */
+function qualid_sync_recordings($token) {
+    $json_files = glob('/tmp/qualid_rec_*.json') ?: [];
+
+    foreach ($json_files as $json_file) {
+        $wav_file = preg_replace('/\.json$/', '.wav', $json_file);
+
+        // WAV file not present yet — MixMonitor may still be initialising
+        if (!file_exists($wav_file)) continue;
+
+        // File still being written (call in progress) — skip for now
+        if ((time() - filemtime($wav_file)) < 60) continue;
+
+        $file_size = filesize($wav_file);
+
+        // Trivially small file = silence / failed recording — discard both files
+        if ($file_size < 1000) {
+            @unlink($wav_file);
+            @unlink($json_file);
+            continue;
+        }
+
+        $meta = json_decode(@file_get_contents($json_file), true);
+        if (empty($meta['session_id'])) {
+            @unlink($json_file);
+            continue;
+        }
+
+        $agi_secret = qualid_get('agi_secret', '');
+        if (!$agi_secret) continue; // Not configured yet
+
+        $ch = curl_init(QUALID_MAIN_API . '/ivr/agi/recording-upload');
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => [
+                'session_id' => (string) $meta['session_id'],
+                'call_type'  => isset($meta['call_type']) ? $meta['call_type'] : 'inbound',
+                'recording'  => new CURLFile($wav_file, 'audio/wav', 'recording.wav'),
+            ],
+            CURLOPT_HTTPHEADER     => ['X-AGI-Secret: ' . $agi_secret],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 120,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSLVERSION     => CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2,
+            CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
+        ]);
+        $raw  = curl_exec($ch);
+        $err  = curl_error($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($err || $code !== 200) continue; // Retry next cycle
+
+        $resp = json_decode($raw ?: '{}', true);
+        if (!empty($resp['success'])) {
+            @unlink($wav_file);
+            @unlink($json_file);
+        }
+    }
+}
