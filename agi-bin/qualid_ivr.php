@@ -141,13 +141,17 @@ function convert_to_wav($mp3_file) {
 agi('ANSWER');
 agi('SET VARIABLE CHANNEL_ANSWERED 1');
 
-// ─ Start recording ───────────────────────────────────────────────────────────
+// ─ Start call recording (MixMonitor — background, both legs) ─────────────────
+// File is written to /tmp/ and uploaded by the runtime sync script after the
+// call ends.  Using the Asterisk UNIQUEID keeps filenames collision-free.
 $_uniq_resp = agi('GET VARIABLE UNIQUEID');
 $_uniqueid  = '';
 if (preg_match('/\(([^)]+)\)/', $_uniq_resp, $_um)) {
     $_uniqueid = preg_replace('/[^a-zA-Z0-9._-]/', '_', $_um[1]);
 }
-if (!$_uniqueid) { $_uniqueid = 'inb_' . time() . '_' . rand(1000, 9999); }
+if (!$_uniqueid) {
+    $_uniqueid = 'inb_' . time() . '_' . rand(1000, 9999);
+}
 $rec_file = '/tmp/qualid_rec_' . $_uniqueid;
 agi("EXEC MixMonitor {$rec_file}.wav,b");
 
@@ -486,7 +490,9 @@ if ($session_id) {
     ]);
 }
 
-// ─ Drop recording sidecar for runtime sync ───────────────────────────────────
+// ─ Drop recording metadata for the runtime sync to pick up ───────────────────
+// MixMonitor keeps writing until the channel closes.  The sync script uploads
+// the file once it has been untouched for 60 seconds (call fully ended).
 if ($session_id && isset($rec_file)) {
     file_put_contents($rec_file . '.json', json_encode([
         'session_id' => $session_id,

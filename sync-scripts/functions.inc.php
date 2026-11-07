@@ -2145,17 +2145,23 @@ function qualid_sync_trunks($token) {
     return array_merge($result, ['tried' => $tried, 'found' => count($trunks)]);
 }
 
-// ── Call Recordings ───────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Call Recording Upload
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Pick up completed MixMonitor recordings from /tmp and upload them to the
- * QUALI-D backend (which stores them in Backblaze B2).
+ * Find completed call recordings in /tmp/ and upload them to the QUALI-D API.
  *
- * AGI scripts write a .json sidecar alongside every .wav file. This function:
- *   1. Finds all /tmp/qualid_rec_*.json files
- *   2. Skips any whose matching .wav was modified less than 60 s ago (still recording)
- *   3. Skips trivially small files (silence / failed recordings)
- *   4. POSTs the .wav + metadata to /ivr/agi/recording-upload
- *   5. Deletes both files on success
+ * The AGI scripts (qualid_ivr.php / qualid_outbound_ivr.php) write two files
+ * per call:
+ *   /tmp/qualid_rec_{uniqueid}.wav   — recorded audio (MixMonitor)
+ *   /tmp/qualid_rec_{uniqueid}.json  — metadata: { session_id, call_type }
+ *
+ * We wait until the WAV file has been untouched for 60 seconds to ensure the
+ * call has fully ended and MixMonitor has flushed its final buffer.
+ *
+ * On successful upload both files are deleted.  On failure they are left in
+ * place and retried on the next 5-minute sync cycle.
  */
 function qualid_sync_recordings($token) {
     $json_files = glob('/tmp/qualid_rec_*.json') ?: [];

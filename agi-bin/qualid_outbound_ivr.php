@@ -263,10 +263,13 @@ $instruction   = $start_resp['instruction'] ?? ['action' => 'hangup', 'reason' =
 
 agi_verbose("[outbound] Sessions: ivr=$session_id ob=$ob_session_id");
 
-// ── Start recording ───────────────────────────────────────────────────────────
+// ─ Start call recording (MixMonitor — background, both legs) ─────────────────
 $_ob_uniqueid = agi_get_var('UNIQUEID');
-if (!$_ob_uniqueid) { $_ob_uniqueid = 'ob_' . time() . '_' . rand(1000, 9999); }
-else { $_ob_uniqueid = preg_replace('/[^a-zA-Z0-9._-]/', '_', $_ob_uniqueid); }
+if (!$_ob_uniqueid) {
+    $_ob_uniqueid = 'ob_' . time() . '_' . rand(1000, 9999);
+} else {
+    $_ob_uniqueid = preg_replace('/[^a-zA-Z0-9._-]/', '_', $_ob_uniqueid);
+}
 $rec_file = '/tmp/qualid_rec_' . $_ob_uniqueid;
 agi_cmd("EXEC MixMonitor {$rec_file}.wav,b");
 
@@ -433,7 +436,7 @@ if ($ob_session_id) {
     ], $base_headers);
 }
 
-// ── Drop recording sidecar for runtime sync ───────────────────────────────────
+// ─ Drop recording metadata for the runtime sync to pick up ───────────────────
 if ($session_id && isset($rec_file)) {
     file_put_contents($rec_file . '.json', json_encode([
         'session_id' => $session_id,
