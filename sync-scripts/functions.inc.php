@@ -1107,7 +1107,7 @@ function qualid_sync_cdr_to_qualid($token) {
 
     $result = qualid_curl_post(
         QUALID_MAIN_API . '/cdr/sync',
-        ['records' => $rows],
+        ['records' => $rows, 'device_uuid' => qualid_get_device_uuid()],
         ['Authorization: Bearer ' . $token]
     );
 
