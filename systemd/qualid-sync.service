@@ -15,7 +15,6 @@ TimeoutStartSec=300
 # ---------------------------------------------------------------------------
 # Sandboxing — sync only needs to read configs + write CDR + call the API
 # ---------------------------------------------------------------------------
-PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/etc/qualid /var/spool/asterisk /var/log/asterisk /tmp /etc/asterisk /etc/hosts

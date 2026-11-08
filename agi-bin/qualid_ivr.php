@@ -167,12 +167,14 @@ if (empty($start_resp['success']) || empty($start_resp['instruction'])) {
 $session_id  = $start_resp['session_id'] ?? null;
 $instruction = $start_resp['instruction'];
 
-// ─ Start call recording (MixMonitor — background, both legs) ─────────────────
+// ─ Start call recording (MixMonitor — background, full channel audio) ───────
 // record_calls defaults to true so existing deployments keep recording until
 // the backend is updated to return the flag explicitly.
+// No 'b' flag: the channel is never bridged during AGI execution, so 'b' would
+// prevent any audio from being captured in the IVR flow.
 $record_calls = !array_key_exists('record_calls', $start_resp) || (bool)$start_resp['record_calls'];
 if ($record_calls) {
-    agi("EXEC MixMonitor {$rec_file}.wav,b");
+    agi("EXEC MixMonitor {$rec_file}.wav");
 }
 $hangup_cause = 'normal';
 

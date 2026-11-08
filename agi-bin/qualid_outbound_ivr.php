@@ -271,7 +271,7 @@ if (!$_ob_uniqueid) {
     $_ob_uniqueid = preg_replace('/[^a-zA-Z0-9._-]/', '_', $_ob_uniqueid);
 }
 $rec_file = '/tmp/qualid_rec_' . $_ob_uniqueid;
-agi_cmd("EXEC MixMonitor {$rec_file}.wav,b");
+agi_cmd("EXEC MixMonitor {$rec_file}.wav");
 
 // ── 7. Instruction execution loop ────────────────────────────────────────────
 
