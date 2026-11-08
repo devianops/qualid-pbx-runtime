@@ -1529,7 +1529,9 @@ function qualid_write_queues($queues) {
         $conf .= 'timeout='           . ((int) (isset($q['timeout'])    ? $q['timeout']    : 30))        . "\n";
         $conf .= 'maxlen='            . ((int) (isset($q['maxlen'])     ? $q['maxlen']     : 0))         . "\n";
         $conf .= 'wrapuptime='        . ((int) (isset($q['wrapuptime']) ? $q['wrapuptime'] : 0))         . "\n";
-        $conf .= 'musicclass='        . (isset($q['music_on_hold'])  ? $q['music_on_hold'] : 'default')  . "\n";
+        $mohClass = (isset($q['music_on_hold']) && $q['music_on_hold'] !== '' && $q['music_on_hold'] !== 'default')
+                        ? $q['music_on_hold'] : 'qualid-default';
+        $conf .= 'musicclass=' . $mohClass . "\n";
         $conf .= 'announce-holdtime=' . (!empty($q['announce_holdtime']) ? 'yes' : 'no') . "\n";
         $conf .= 'announce-position=' . (!empty($q['announce_position']) ? 'yes' : 'no') . "\n";
         $members = isset($q['members']) ? $q['members'] : array();
