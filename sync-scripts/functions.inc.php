@@ -1620,7 +1620,7 @@ function qualid_write_moh_conf($queues) {
     // qualid-default — always present
     $conf .= "[qualid-default]\n";
     $conf .= "mode=custom\n";
-    $conf .= "application=/usr/bin/mpg123 -q -r 8000 --mono {$moh_dir}/default.mp3\n";
+    $conf .= "application=/usr/bin/mpg123 -q -s -r 8000 --mono {$moh_dir}/default.mp3\n";
     $conf .= "format=slin\n\n";
 
     // Per-queue custom classes
@@ -1636,7 +1636,7 @@ function qualid_write_moh_conf($queues) {
 
         $conf .= "[{$moh_class}]\n";
         $conf .= "mode=custom\n";
-        $conf .= "application=/usr/bin/mpg123 -q -r 8000 --mono {$file}\n";
+        $conf .= "application=/usr/bin/mpg123 -q -s -r 8000 --mono {$file}\n";
         $conf .= "format=slin\n\n";
     }
 
