@@ -170,57 +170,6 @@
     flex-shrink: 0;
   }
 
-  /* ── Settings rows ───────────────────────────────────────── */
-  .settings-section {
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border);
-  }
-  .setting-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 6px 0;
-  }
-  .setting-label { text-align: left; }
-  .setting-label span:first-child {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-    display: block;
-  }
-  .setting-label small {
-    font-size: 11px;
-    color: var(--muted);
-    display: block;
-    margin-top: 1px;
-  }
-
-  /* Toggle switch */
-  .toggle { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
-  .toggle input { opacity: 0; width: 0; height: 0; }
-  .slider {
-    position: absolute; inset: 0;
-    background: var(--border);
-    border-radius: 22px;
-    cursor: pointer;
-    transition: background .2s;
-  }
-  .slider::before {
-    content: '';
-    position: absolute;
-    width: 16px; height: 16px;
-    left: 3px; top: 3px;
-    background: #fff;
-    border-radius: 50%;
-    transition: transform .2s;
-    box-shadow: 0 1px 3px rgba(0,0,0,.2);
-  }
-  .toggle input:checked + .slider { background: var(--accent); }
-  .toggle input:checked + .slider::before { transform: translateX(16px); }
-  .toggle input:disabled + .slider { opacity: .5; cursor: default; }
-
   /* ── Update section ──────────────────────────────────────── */
   .update-section {
     margin-top: 20px;
@@ -326,20 +275,6 @@
          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
         &#9881; Diagnostics
       </a>
-    </div>
-
-    <!-- Settings section -->
-    <div class="settings-section">
-      <div class="setting-row">
-        <div class="setting-label">
-          <span>Call Recording</span>
-          <small>Record inbound calls and store to cloud</small>
-        </div>
-        <label class="toggle" title="Toggle call recording">
-          <input type="checkbox" id="rec-toggle" disabled onchange="setRecording(this.checked)">
-          <span class="slider"></span>
-        </label>
-      </div>
     </div>
 
     <!-- Update section — populated by JS on load -->
@@ -486,44 +421,9 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-// ── call recording toggle ─────────────────────────────────────
-async function loadRecordingSettings() {
-  try {
-    var r = await fetch('api.php?action=get_recording_settings');
-    var d = await r.json();
-    var chk = document.getElementById('rec-toggle');
-    if (d.success) {
-      chk.checked  = !!d.record_calls;
-      chk.disabled = false;
-    }
-  } catch(e) {}
-}
-
-async function setRecording(enabled) {
-  var chk = document.getElementById('rec-toggle');
-  chk.disabled = true;
-  try {
-    var fd = new FormData();
-    fd.append('enabled', enabled ? '1' : '0');
-    var r = await fetch('api.php?action=set_recording', { method: 'POST', body: fd });
-    var d = await r.json();
-    if (d.success) {
-      chk.checked = !!d.record_calls;
-    } else {
-      // Revert on failure
-      chk.checked = !enabled;
-    }
-  } catch(e) {
-    chk.checked = !enabled;
-  } finally {
-    chk.disabled = false;
-  }
-}
-
 // ── on load: load device name + check if an update is in progress ──
 (async function init() {
   loadDeviceName();
-  loadRecordingSettings();
   try {
     var r = await fetch('api.php?action=update_status');
     var d = await r.json();

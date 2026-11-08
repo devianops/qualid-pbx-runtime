@@ -431,38 +431,4 @@ if ($action === 'update_status') {
     ]);
 }
 
-// ---------------------------------------------------------------------------
-// get_recording_settings — returns record_calls flag from the backend
-// ---------------------------------------------------------------------------
-if ($action === 'get_recording_settings') {
-    $token = qualid_get('token', '');
-    if (!$token) fail('Not connected.', 401);
-    $uuid   = qualid_get_device_uuid();
-    $result = qualid_curl_get(
-        QUALID_MAIN_API . '/ivr/settings?device_uuid=' . urlencode($uuid),
-        ['Authorization: Bearer ' . $token]
-    );
-    if (!empty($result['_error'])) fail('Could not reach backend: ' . $result['_error']);
-    ok(['record_calls' => isset($result['record_calls']) ? (bool)$result['record_calls'] : true]);
-}
-
-// ---------------------------------------------------------------------------
-// set_recording — enable or disable call recording on this device
-// ---------------------------------------------------------------------------
-if ($action === 'set_recording') {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') fail('POST required.', 405);
-    $enabled = filter_var($_POST['enabled'] ?? '1', FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-    if ($enabled === null) fail('enabled must be 0 or 1.');
-    $token = qualid_get('token', '');
-    if (!$token) fail('Not connected.', 401);
-    $uuid   = qualid_get_device_uuid();
-    $result = qualid_curl_post(
-        QUALID_MAIN_API . '/ivr/settings/recording',
-        ['device_uuid' => $uuid, 'enabled' => $enabled],
-        ['Authorization: Bearer ' . $token]
-    );
-    if (!empty($result['_error'])) fail('Could not reach backend: ' . $result['_error']);
-    ok(['record_calls' => isset($result['record_calls']) ? (bool)$result['record_calls'] : $enabled]);
-}
-
 fail('Unknown action.', 400);
