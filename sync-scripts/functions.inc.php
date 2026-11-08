@@ -1529,6 +1529,10 @@ function qualid_write_queues($queues) {
         $conf .= 'timeout='           . ((int) (isset($q['timeout'])    ? $q['timeout']    : 30))        . "\n";
         $conf .= 'maxlen='            . ((int) (isset($q['maxlen'])     ? $q['maxlen']     : 0))         . "\n";
         $conf .= 'wrapuptime='        . ((int) (isset($q['wrapuptime']) ? $q['wrapuptime'] : 0))         . "\n";
+        // Do not ring an agent who is already on a call or in a ringing state.
+        // Without this, Asterisk (especially with Local channel members) may send
+        // a second INVITE before the first has been fully torn down.
+        $conf .= 'ringinuse=no'                                                                          . "\n";
         $mohClass = (isset($q['music_on_hold']) && $q['music_on_hold'] !== '' && $q['music_on_hold'] !== 'default')
                         ? $q['music_on_hold'] : 'qualid-default';
         $conf .= 'musicclass=' . $mohClass . "\n";
