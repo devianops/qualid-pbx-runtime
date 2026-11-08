@@ -325,7 +325,28 @@ if ($action === 'diagnose') {
             $memberCount . ' member(s) across all queues')
         : chk('queue_members', 'Queue members in Asterisk', 'warn', 'No queues loaded — check queues_qualid.conf');
 
-    // 10. Version vs latest release
+    // 10. FXO / SIP Gateways
+    $gatewayConf = '/etc/asterisk/pjsip_qualid_gateways.conf';
+    if (!file_exists($gatewayConf)) {
+        $checks[] = chk('gateways', 'FXO / SIP Gateways', 'ok', 'No gateways configured yet');
+    } else {
+        preg_match_all('/^type=endpoint$/m', (string)file_get_contents($gatewayConf), $gm);
+        $gwTotal = count($gm[0]);
+        if ($gwTotal === 0) {
+            $checks[] = chk('gateways', 'FXO / SIP Gateways', 'ok', 'No gateways configured yet');
+        } else {
+            $contactsOut = ast('pjsip show contacts');
+            $gwRegistered = preg_match_all('/_gw_aor\//i', $contactsOut);
+            $gwStatus = ($gwRegistered === $gwTotal) ? 'ok' : 'warn';
+            $detail = $gwRegistered . '/' . $gwTotal . ' registered';
+            if ($gwRegistered < $gwTotal) {
+                $detail .= ' — check SIP credentials on unregistered device(s)';
+            }
+            $checks[] = chk('gateways', 'FXO / SIP Gateways', $gwStatus, $detail);
+        }
+    }
+
+    // 11. Version vs latest release
     $installed = trim((string)@file_get_contents('/etc/qualid/version')) ?: 'unknown';
     $ctx = stream_context_create(['http' => ['header' => "User-Agent: qualid-pbx\r\n", 'timeout' => 5]]);
     $relJson = @file_get_contents('https://api.github.com/repos/devianops/qualid-pbx-runtime/releases/latest', false, $ctx);
