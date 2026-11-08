@@ -490,10 +490,10 @@ function qualid_write_pjsip_extensions($extensions) {
             $secret      = isset($ext['secret'])       ? $ext['secret']             : '';
             $routingType = isset($ext['routing_type']) ? $ext['routing_type']       : 'local';
 
-            // Remote agents connect via the cloud VPS — no local PJSIP endpoint needed
-            if (!$exten || $type !== 'pjsip' || $routingType === 'remote') continue;
+            if (!$exten || $type !== 'pjsip') continue;
 
-            $callerid = $name . ' <' . $exten . '>';
+            $callerid  = $name . ' <' . $exten . '>';
+            $isCloud   = ($routingType === 'remote');
 
             if ($secret !== '') {
                 $conf .= "[{$exten}-auth]\n";
@@ -516,11 +516,20 @@ function qualid_write_pjsip_extensions($extensions) {
             $conf .= "allow=opus\n";
             $conf .= "allow=ulaw\n";
             $conf .= "allow=alaw\n";
-            $conf .= "webrtc=yes\n";
-            $conf .= "dtls_auto_generate_cert=yes\n";
-            $conf .= "ice_support=yes\n";
-            $conf .= "media_use_received_transport=yes\n";
-            $conf .= "rtcp_mux=yes\n";
+
+            if ($isCloud) {
+                // CLOUD mode — softphone connects via relay; use WebRTC/DTLS
+                $conf .= "webrtc=yes\n";
+                $conf .= "dtls_auto_generate_cert=yes\n";
+                $conf .= "ice_support=yes\n";
+                $conf .= "media_use_received_transport=yes\n";
+                $conf .= "rtcp_mux=yes\n";
+            } else {
+                // LAN mode — softphone is on the local network; plain SIP/RTP
+                $conf .= "force_rport=yes\n";
+                $conf .= "rtp_symmetric=yes\n";
+            }
+
             $conf .= "aors={$exten}\n";
             if ($secret !== '') {
                 $conf .= "auth={$exten}-auth\n";
