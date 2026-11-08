@@ -33,6 +33,37 @@ define('QUALID_API_BASE',   $_qconf['api_base']   ?? 'https://api.quali-d.com');
 define('QUALID_AGI_SECRET', $_qconf['agi_secret'] ?? '');
 define('QUALID_TIMEOUT',    8);
 
+// ─ SIGHUP handler — fired by Asterisk the moment the caller hangs up ─────────
+// Without this, PHP terminates on SIGHUP before StopMixMonitor can be called,
+// leaving MixMonitor recording busy tones until the channel is destroyed (~40 s).
+$g_record_calls = false;
+$g_rec_file     = null;
+$g_session_id   = null;
+$g_hangup_cause = 'customer_hungup';
+
+pcntl_async_signals(true);
+pcntl_signal(SIGHUP, function () {
+    global $g_record_calls, $g_rec_file, $g_session_id, $g_hangup_cause;
+    if ($g_record_calls && $g_rec_file) {
+        @fwrite(STDOUT, "EXEC StopMixMonitor\n");
+        @fflush(STDOUT);
+        @fgets(STDIN);
+    }
+    if ($g_session_id) {
+        api_post('/ivr/agi/end', [
+            'session_id'   => $g_session_id,
+            'hangup_cause' => $g_hangup_cause,
+        ]);
+    }
+    if ($g_record_calls && $g_session_id && $g_rec_file) {
+        file_put_contents($g_rec_file . '.json', json_encode([
+            'session_id' => $g_session_id,
+            'call_type'  => 'inbound',
+        ]));
+    }
+    exit(0);
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Read all AGI environment variables from stdin
@@ -177,6 +208,12 @@ if ($record_calls) {
     agi("EXEC MixMonitor {$rec_file}.wav");
 }
 $hangup_cause = 'normal';
+
+// Keep SIGHUP handler in sync with current call state
+$g_record_calls = $record_calls;
+$g_rec_file     = $rec_file;
+$g_session_id   = $session_id;
+$g_hangup_cause = &$hangup_cause;
 
 // ─ Main execution loop ────────────────────────────────────────────────────────
 while (true) {

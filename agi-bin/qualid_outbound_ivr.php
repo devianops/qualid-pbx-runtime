@@ -31,6 +31,36 @@
 
 declare(strict_types=1);
 
+// ─ SIGHUP handler — fired by Asterisk the moment the caller hangs up ─────────
+$g_rec_file     = null;
+$g_session_id   = null;
+$g_ob_session_id = null;
+$g_hangup_cause = 'customer_hungup';
+
+pcntl_async_signals(true);
+pcntl_signal(SIGHUP, function () {
+    global $g_rec_file, $g_session_id, $g_ob_session_id, $g_hangup_cause, $api_base, $base_headers;
+    if ($g_rec_file) {
+        @fwrite(STDOUT, "EXEC StopMixMonitor\n");
+        @fflush(STDOUT);
+        @fgets(STDIN);
+    }
+    if ($g_rec_file && $g_session_id) {
+        file_put_contents($g_rec_file . '.json', json_encode([
+            'session_id' => $g_session_id,
+            'call_type'  => 'outbound',
+        ]));
+    }
+    if ($g_ob_session_id) {
+        ob_post($api_base . '/outbound/agi/end', [
+            'ob_session_id' => $g_ob_session_id,
+            'session_id'    => $g_session_id,
+            'hangup_cause'  => $g_hangup_cause,
+        ], $base_headers);
+    }
+    exit(0);
+});
+
 // ── 1. Read AGI environment from stdin ──────────────────────────────────────
 $agi = [];
 while (($line = fgets(STDIN)) !== false) {
@@ -273,11 +303,17 @@ if (!$_ob_uniqueid) {
 $rec_file = '/tmp/qualid_rec_' . $_ob_uniqueid;
 agi_cmd("EXEC MixMonitor {$rec_file}.wav");
 
+// Keep SIGHUP handler in sync with current call state
+$g_rec_file      = $rec_file;
+$g_session_id    = $session_id;
+$g_ob_session_id = $ob_session_id;
+
 // ── 7. Instruction execution loop ────────────────────────────────────────────
 
 $max_steps    = 50;
 $step_num     = 0;
 $hangup_cause = 'completed';
+$g_hangup_cause = &$hangup_cause;
 $event        = 'done';
 $event_data   = null;
 
