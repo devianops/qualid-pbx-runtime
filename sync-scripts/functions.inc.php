@@ -1318,7 +1318,7 @@ function qualid_write_gateway_endpoints($gateways) {
     foreach ($gateways as $gw) {
         $user    = preg_replace('/[^A-Za-z0-9_-]/', '', $gw['username'] ?? '');
         $pass    = $gw['password'] ?? '';
-        $context = preg_replace('/[^A-Za-z0-9_-]/', '', $gw['context'] ?? 'qualid-inbound-fxo');
+        $context = preg_replace('/[^A-Za-z0-9_-]/', '', $gw['context'] ?? 'qualid-ivr');
         if (!$user || !$pass) continue;
 
         $conf .= "; --- {$user} ---\n";
