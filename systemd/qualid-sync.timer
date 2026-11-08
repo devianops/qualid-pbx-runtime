@@ -1,6 +1,5 @@
 [Unit]
 Description=Quali-D PBX Sync — run every minute
-Requires=qualid-sync.service
 
 [Timer]
 # Run 60 s after boot so Asterisk is fully up

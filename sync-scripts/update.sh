@@ -127,7 +127,7 @@ fi
 
 chmod +x "${install_sh}"
 log "Installing version ${latest_version}..."
-bash "${install_sh}" "${latest_version}" >> "${LOG_FILE}" 2>&1 || {
+bash "${install_sh}" "${latest_version}" || {
     warn "install.sh exited with error — rollback may be needed"
     watchdog
     exit 1

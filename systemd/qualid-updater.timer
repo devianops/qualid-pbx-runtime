@@ -1,6 +1,5 @@
 [Unit]
 Description=Quali-D PBX Auto-Updater — check for updates every hour
-Requires=qualid-updater.service
 
 [Timer]
 # First check 5 minutes after boot
