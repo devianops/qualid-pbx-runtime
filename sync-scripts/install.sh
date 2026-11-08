@@ -136,6 +136,21 @@ _ensure_pkg php                  "php-fpm php-curl"      "PHP-FPM"
 _ensure_pkg ufw                  "ufw"                   "UFW firewall"
 _ensure_pkg mpg123               "mpg123"                "MP3 decoder (IVR audio playback)"
 
+# Ensure res_srtp module is present — required for PJSIP media negotiation
+_SRTP_MODULE="/usr/lib/asterisk/modules/res_srtp.so"
+if [[ ! -f "${_SRTP_MODULE}" ]]; then
+    log "MISSING: res_srtp.so — installing asterisk22-res-srtp..."
+    if [[ "${_APT_UPDATED}" -eq 0 ]]; then
+        DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>/dev/null || true
+        _APT_UPDATED=1
+    fi
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -q asterisk22-res-srtp \
+        && log "asterisk22-res-srtp installed." \
+        || warn "asterisk22-res-srtp install failed — fix manually: apt-get install -y asterisk22-res-srtp"
+else
+    log "OK: res_srtp.so"
+fi
+
 # ---------------------------------------------------------------------------
 # 2b. Copy setup wizard files
 # ---------------------------------------------------------------------------
@@ -324,7 +339,8 @@ fi
 # 6. Reload Asterisk dialplan (non-fatal if Asterisk is not up yet)
 # ---------------------------------------------------------------------------
 if /usr/sbin/asterisk -rx "core show version" &>/dev/null; then
-    /usr/sbin/asterisk -rx "dialplan reload"      &>/dev/null || true
+    /usr/sbin/asterisk -rx "module load res_srtp.so"    &>/dev/null || true
+    /usr/sbin/asterisk -rx "dialplan reload"            &>/dev/null || true
     /usr/sbin/asterisk -rx "module reload res_pjsip.so" &>/dev/null || true
     log "Asterisk reloaded."
 fi
