@@ -17,6 +17,9 @@
 set -euo pipefail
 
 NEW_VERSION="${1:-}"
+
+# Trap any failing command and log the line number + command before exiting.
+trap 'warn "install.sh failed at line ${LINENO}: ${BASH_COMMAND}"' ERR
 QUALID_DIR="/usr/share/qualid"
 CONFIG_DIR="/etc/qualid"
 ASTERISK_ETC="/etc/asterisk"
