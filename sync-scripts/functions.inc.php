@@ -1326,7 +1326,7 @@ function qualid_sync_gateways($token) {
  * Each gateway gets three PJSIP objects:
  *   [{username}]           — endpoint (inbound registration target)
  *   [{username}_gw_auth]   — auth (userpass)
- *   [{username}_gw_aor]    — aor  (max 1 contact, replace on re-register)
+ *   [{username}]           — aor  (same name as endpoint — PJSIP registrar matches AOR by To: user)
  */
 function qualid_write_gateway_endpoints($gateways) {
     $conf = "; =============================================================================\n"
@@ -1347,7 +1347,7 @@ function qualid_write_gateway_endpoints($gateways) {
         $conf .= "disallow=all\n";
         $conf .= "allow=ulaw,alaw,g722\n";
         $conf .= "auth={$user}_gw_auth\n";
-        $conf .= "aors={$user}_gw_aor\n";
+        $conf .= "aors={$user}\n";
         $conf .= "direct_media=no\n";
         $conf .= "trust_id_inbound=yes\n\n";
 
@@ -1357,7 +1357,7 @@ function qualid_write_gateway_endpoints($gateways) {
         $conf .= "username={$user}\n";
         $conf .= "password={$pass}\n\n";
 
-        $conf .= "[{$user}_gw_aor]\n";
+        $conf .= "[{$user}]\n";
         $conf .= "type=aor\n";
         $conf .= "max_contacts=1\n";
         $conf .= "remove_existing=yes\n\n";

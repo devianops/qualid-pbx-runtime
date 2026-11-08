@@ -336,7 +336,15 @@ if ($action === 'diagnose') {
             $checks[] = chk('gateways', 'FXO / SIP Gateways', 'ok', 'No gateways configured yet');
         } else {
             $contactsOut = ast('pjsip show contacts');
-            $gwRegistered = preg_match_all('/_gw_aor\//i', $contactsOut);
+            // Contacts for gateway AORs appear as "{username}/sip:..." in pjsip show contacts
+            // Extract gateway usernames from the conf to match against contacts output
+            preg_match_all('/^; --- (.+?) ---$/m', (string)file_get_contents($gatewayConf), $usernames);
+            $gwRegistered = 0;
+            foreach ($usernames[1] as $gwUser) {
+                if (preg_match('/^' . preg_quote($gwUser, '/') . '\//m', $contactsOut)) {
+                    $gwRegistered++;
+                }
+            }
             $gwStatus = ($gwRegistered === $gwTotal) ? 'ok' : 'warn';
             $detail = $gwRegistered . '/' . $gwTotal . ' registered';
             if ($gwRegistered < $gwTotal) {
