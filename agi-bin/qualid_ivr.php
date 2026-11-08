@@ -36,18 +36,21 @@ define('QUALID_TIMEOUT',    8);
 // ─ SIGHUP handler — fired by Asterisk the moment the caller hangs up ─────────
 // Without this, PHP terminates on SIGHUP before StopMixMonitor can be called,
 // leaving MixMonitor recording busy tones until the channel is destroyed (~40 s).
+// Uses asterisk CLI (not the AGI pipe) to stop MixMonitor — the pipe may already
+// be closed by the time SIGHUP is delivered, making AGI fwrite/fgets unreliable.
 $g_record_calls = false;
 $g_rec_file     = null;
 $g_session_id   = null;
 $g_hangup_cause = 'customer_hungup';
+$g_channel      = null;
 
 pcntl_async_signals(true);
+pcntl_signal(SIGPIPE, SIG_IGN); // Ignore broken-pipe so SIGHUP handler still runs
 pcntl_signal(SIGHUP, function () {
-    global $g_record_calls, $g_rec_file, $g_session_id, $g_hangup_cause;
-    if ($g_record_calls && $g_rec_file) {
-        @fwrite(STDOUT, "EXEC StopMixMonitor\n");
-        @fflush(STDOUT);
-        @fgets(STDIN);
+    global $g_record_calls, $g_rec_file, $g_session_id, $g_hangup_cause, $g_channel;
+    if ($g_record_calls && $g_rec_file && $g_channel) {
+        // Stop MixMonitor via Asterisk CLI — bypasses the (possibly closed) AGI pipe
+        shell_exec('/usr/sbin/asterisk -rx ' . escapeshellarg('mixmonitor stop ' . $g_channel) . ' 2>/dev/null');
     }
     if ($g_session_id) {
         api_post('/ivr/agi/end', [
@@ -80,6 +83,7 @@ while (true) {
 $caller_id = $agi_vars['callerid']    ?? 'unknown';
 $did       = $agi_vars['extension']   ?? '';
 $channel   = $agi_vars['channel']     ?? '';
+$g_channel = $channel; // expose to SIGHUP handler
 
 // ─ Helper: send AGI command and read response ─────────────────────────────────
 function agi($cmd) {

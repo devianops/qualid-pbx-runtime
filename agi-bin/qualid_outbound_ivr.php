@@ -32,18 +32,18 @@
 declare(strict_types=1);
 
 // ─ SIGHUP handler — fired by Asterisk the moment the caller hangs up ─────────
-$g_rec_file     = null;
-$g_session_id   = null;
+$g_rec_file      = null;
+$g_session_id    = null;
 $g_ob_session_id = null;
-$g_hangup_cause = 'customer_hungup';
+$g_hangup_cause  = 'customer_hungup';
+$g_channel       = null;
 
 pcntl_async_signals(true);
+pcntl_signal(SIGPIPE, SIG_IGN);
 pcntl_signal(SIGHUP, function () {
-    global $g_rec_file, $g_session_id, $g_ob_session_id, $g_hangup_cause, $api_base, $base_headers;
-    if ($g_rec_file) {
-        @fwrite(STDOUT, "EXEC StopMixMonitor\n");
-        @fflush(STDOUT);
-        @fgets(STDIN);
+    global $g_rec_file, $g_session_id, $g_ob_session_id, $g_hangup_cause, $g_channel, $api_base, $base_headers;
+    if ($g_rec_file && $g_channel) {
+        shell_exec('/usr/sbin/asterisk -rx ' . escapeshellarg('mixmonitor stop ' . $g_channel) . ' 2>/dev/null');
     }
     if ($g_rec_file && $g_session_id) {
         file_put_contents($g_rec_file . '.json', json_encode([
@@ -126,6 +126,7 @@ if (!$api_base || !$agi_secret) {
 // agi_arg_1 / agi_arg_2 come from: AGI(qualid_outbound_ivr.php,${CONTACT_ID},${CAMPAIGN_ID})
 $contact_id  = (int) ($agi['agi_arg_1'] ?? 0);
 $campaign_id = (int) ($agi['agi_arg_2'] ?? 0);
+$g_channel   = $agi['agi_channel'] ?? null; // expose to SIGHUP handler
 
 // The number we dialled — agi_dnid is the destination for call-file calls
 $called_num  = $agi['agi_dnid'] ?? '';
