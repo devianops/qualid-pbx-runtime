@@ -4,8 +4,8 @@
 # Runs as root via qualid-updater.service (systemd timer, every hour).
 #
 # What it does:
-#   1. Checks GitHub releases for a newer version than /etc/qualid/version
-#   2. If found: downloads the tarball, extracts, runs install.sh
+#   1. Checks https://quali-d.com/downloads/firmware/version.txt for a newer version
+#   2. If found: downloads qualid_pbx_os.tar.gz from the same path, extracts, runs install.sh
 #   3. Always: ensures Asterisk is running (offline watchdog)
 # =============================================================================
 
@@ -14,8 +14,9 @@ set -euo pipefail
 QUALID_DIR="/usr/share/qualid"
 CONFIG_DIR="/etc/qualid"
 VERSION_FILE="${CONFIG_DIR}/version"
-GITHUB_REPO="devianops/qualid-pbx-runtime"
-GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+UPDATE_BASE="https://quali-d.com/downloads/firmware"
+VERSION_URL="${UPDATE_BASE}/version.txt"
+TARBALL_URL="${UPDATE_BASE}/qualid_pbx_os.tar.gz"
 TMP_DIR=$(mktemp -d /tmp/qualid-update.XXXXXX)
 LOG_TAG="qualid-updater"
 # Log file in /etc/qualid/ — accessible to www-data (owned by www-data) so the
@@ -53,21 +54,16 @@ fi
 log "Current version: ${current_version}"
 
 # ---------------------------------------------------------------------------
-# 2. Query GitHub for latest release
+# 2. Fetch latest version from Quali-D update server
 # ---------------------------------------------------------------------------
-api_response=$(curl -sf --max-time 15 \
-    -H "Accept: application/vnd.github+json" \
-    "${GITHUB_API}" 2>/dev/null) || {
-    warn "GitHub API unreachable — skipping update check"
+latest_version=$(curl -sf --max-time 15 "${VERSION_URL}" 2>/dev/null | tr -d '[:space:]') || {
+    warn "Update server unreachable — skipping update check"
     watchdog
     exit 0
 }
 
-latest_version=$(echo "${api_response}" | grep '"tag_name"' \
-    | head -1 | sed 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/')
-
 if [[ -z "${latest_version}" ]]; then
-    warn "Could not parse latest version from GitHub — skipping"
+    warn "Could not read latest version from update server — skipping"
     watchdog
     exit 0
 fi
@@ -95,13 +91,10 @@ fi
 # ---------------------------------------------------------------------------
 # 4. Download and extract the release tarball
 # ---------------------------------------------------------------------------
-# Asset is uploaded as qualid_pbx_os.tar.gz — a stable name so this URL never
-# needs to change regardless of the version tag.
-tarball_url="https://github.com/${GITHUB_REPO}/releases/latest/download/qualid_pbx_os.tar.gz"
 tarball="${TMP_DIR}/qualid_pbx_os.tar.gz"
 
 log "Downloading update package..."
-curl -sfL --max-time 120 -o "${tarball}" "${tarball_url}" || {
+curl -sfL --max-time 120 -o "${tarball}" "${TARBALL_URL}" || {
     warn "Download failed — aborting update"
     watchdog
     exit 1
