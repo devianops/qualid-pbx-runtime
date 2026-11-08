@@ -355,10 +355,8 @@ if ($action === 'diagnose') {
 
     // 11. Version vs latest release
     $installed = trim((string)@file_get_contents('/etc/qualid/version')) ?: 'unknown';
-    $ctx = stream_context_create(['http' => ['header' => "User-Agent: qualid-pbx\r\n", 'timeout' => 5]]);
-    $relJson = @file_get_contents('https://api.github.com/repos/devianops/qualid-pbx-runtime/releases/latest', false, $ctx);
-    $latest = 'unknown';
-    if ($relJson) { $rel = json_decode($relJson, true); $latest = ltrim($rel['tag_name'] ?? 'unknown', 'v'); }
+    $ctx = stream_context_create(['http' => ['timeout' => 5]]);
+    $latest = trim((string)@file_get_contents('https://quali-d.com/downloads/firmware/version.txt', false, $ctx)) ?: 'unknown';
     $upToDate = ($installed !== 'unknown' && $installed === $latest);
     $checks[] = chk('version', 'Runtime version',
         $latest === 'unknown' ? 'warn' : ($upToDate ? 'ok' : 'warn'),
@@ -368,17 +366,16 @@ if ($action === 'diagnose') {
 }
 
 // ---------------------------------------------------------------------------
-// check_update — compare installed version with latest GitHub release
+// check_update — compare installed version with latest release on update server
 // ---------------------------------------------------------------------------
 if ($action === 'check_update') {
     $installed = trim((string)@file_get_contents('/etc/qualid/version')) ?: 'unknown';
-    $ctx = stream_context_create(['http' => ['header' => "User-Agent: qualid-pbx\r\n", 'timeout' => 6]]);
-    $relJson = @file_get_contents('https://api.github.com/repos/devianops/qualid-pbx-runtime/releases/latest', false, $ctx);
-    if (!$relJson) {
+    $ctx = stream_context_create(['http' => ['timeout' => 6]]);
+    $latestRaw = @file_get_contents('https://quali-d.com/downloads/firmware/version.txt', false, $ctx);
+    if ($latestRaw === false) {
         ok(['installed' => $installed, 'latest' => null, 'has_update' => false, 'offline' => true]);
     }
-    $rel       = json_decode($relJson, true);
-    $latest    = ltrim($rel['tag_name'] ?? '', 'v');
+    $latest    = trim((string)$latestRaw);
     $hasUpdate = ($latest && $installed !== 'unknown' && version_compare($latest, $installed, '>'));
     ok(['installed' => $installed, 'latest' => $latest ?: null, 'has_update' => $hasUpdate]);
 }
