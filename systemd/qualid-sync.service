@@ -17,7 +17,7 @@ TimeoutStartSec=300
 # ---------------------------------------------------------------------------
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/etc/qualid /var/spool/asterisk /var/log/asterisk /tmp /etc/asterisk /etc/hosts
+ReadWritePaths=/etc/qualid /var/spool/asterisk /var/log/asterisk /tmp /etc/asterisk /etc/hosts /var/lib/asterisk
 ReadOnlyPaths=/usr/share/qualid
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
