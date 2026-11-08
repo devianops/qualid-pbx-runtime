@@ -395,6 +395,12 @@ function qualid_write_pjsip($cfg) {
 ; To reconfigure, use the Quali-D Connect admin page.
 ; =============================================================================
 
+; UDP transport — required for local SIP device registrations (FXO gateways, extensions)
+[qualid_lan_udp_transport]
+type=transport
+protocol=udp
+bind=0.0.0.0:5060
+
 [{$trunk_name}_tls_transport]
 type=transport
 protocol=tls
@@ -1281,6 +1287,18 @@ function qualid_sync_queues($token) {
  * Fetch gateway (FXO / SIP trunk) credentials from the cloud and write
  * pjsip_qualid_gateways.conf so registered devices can connect to Asterisk.
  */
+// Ensures the LAN UDP transport exists in pjsip_qualid.conf.
+// No-op if already present. Self-heals devices activated before the UDP transport was added.
+function qualid_ensure_udp_transport() {
+    $path = '/etc/asterisk/pjsip_qualid.conf';
+    if (!file_exists($path)) return;
+    if (strpos((string)file_get_contents($path), '[qualid_lan_udp_transport]') !== false) return;
+    $stanza = "\n; UDP transport — added by qualid_ensure_udp_transport\n"
+            . "[qualid_lan_udp_transport]\ntype=transport\nprotocol=udp\nbind=0.0.0.0:5060\n";
+    file_put_contents($path, file_get_contents($path) . $stanza);
+    @exec('/usr/sbin/asterisk -rx "module reload res_pjsip.so" 2>/dev/null');
+}
+
 function qualid_sync_gateways($token) {
     $result = qualid_curl_get(
         QUALID_MAIN_API . '/ivr/gateways/asterisk-config?device_uuid=' . urlencode(qualid_get_device_uuid()),
@@ -1295,6 +1313,7 @@ function qualid_sync_gateways($token) {
     }
 
     $gateways = isset($result['gateways']) ? $result['gateways'] : array();
+    qualid_ensure_udp_transport();
     qualid_write_gateway_endpoints($gateways);
 
     return array('success' => true, 'gateways' => count($gateways));
