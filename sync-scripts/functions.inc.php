@@ -373,7 +373,7 @@ DIALPLAN;
     qualid_ensure_include($ext_parent, 'extensions_qualid_outbound.conf');
 
     // Reload dialplan live so the context is available immediately
-    @exec('sudo /usr/sbin/asterisk -rx "dialplan reload" > /dev/null 2>&1');
+    @exec('/usr/sbin/asterisk -rx "dialplan reload" > /dev/null 2>&1');
 }
 
 function qualid_write_pjsip($cfg) {
@@ -649,7 +649,7 @@ CONF;
     qualid_pin_hosts_entry(QUALID_CLOUD_IP, $turn_domain);
 
     // Reload the RTP module so Asterisk picks up the new TURN credentials
-    exec('sudo /usr/sbin/asterisk -rx "module reload res_rtp_asterisk.so" 2>/dev/null');
+    exec('/usr/sbin/asterisk -rx "module reload res_rtp_asterisk.so" 2>/dev/null');
 }
 
 /**
@@ -1233,7 +1233,7 @@ function qualid_sync_extensions($token) {
     if (!empty($list_result['extensions']) && is_array($list_result['extensions'])) {
         qualid_write_extensions_cache($list_result['extensions']);
         qualid_write_pjsip_extensions($list_result['extensions']);
-        exec('sudo /usr/sbin/asterisk -rx "module reload res_pjsip.so" 2>/dev/null');
+        exec('/usr/sbin/asterisk -rx "module reload res_pjsip.so" 2>/dev/null');
     } elseif (!empty($rows)) {
         // Fallback: cloud unreachable — write PJSIP from local cache (e.g. after a reboot).
         qualid_write_pjsip_extensions($rows);
@@ -1433,7 +1433,7 @@ function qualid_write_queues($queues) {
 
     // Reload just the queue module — no full Asterisk restart needed.
     // This takes effect immediately without any manual Apply Config click.
-    if (function_exists('shell_exec')) { @shell_exec('sudo /usr/sbin/asterisk -rx "module reload app_queue.so" 2>/dev/null'); }
+    @exec('/usr/sbin/asterisk -rx "module reload app_queue.so" 2>/dev/null');
 }
 
 /**

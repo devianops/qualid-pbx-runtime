@@ -318,9 +318,7 @@ if ($action === 'diagnose') {
 
     // 9. Queue members in Asterisk
     $queueOut = ast('queue show');
-    preg_match_all('/Members:\s*\n((?:\s+.+\n)*)/i', $queueOut, $m);
-    $memberCount = 0;
-    foreach ($m[1] as $block) { $memberCount += preg_match_all('/\(/', $block); }
+    $memberCount = preg_match_all('/^\s+(PJSIP|SIP|Local)\//m', $queueOut);
     $hasQueues = strpos($queueOut, 'has') !== false;
     $checks[] = $hasQueues
         ? chk('queue_members', 'Queue members in Asterisk', $memberCount > 0 ? 'ok' : 'warn',

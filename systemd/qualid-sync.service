@@ -5,8 +5,6 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=asterisk
-Group=asterisk
 ExecStart=/usr/bin/php -d pcre.jit=0 /usr/share/qualid/sync-scripts/sync.php
 StandardOutput=journal
 StandardError=journal
@@ -17,7 +15,6 @@ TimeoutStartSec=300
 # ---------------------------------------------------------------------------
 # Sandboxing — sync only needs to read configs + write CDR + call the API
 # ---------------------------------------------------------------------------
-NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
