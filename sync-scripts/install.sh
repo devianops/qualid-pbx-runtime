@@ -131,6 +131,7 @@ fi
 _ensure_pkg nginx                "nginx"                 "nginx web server"
 _ensure_pkg php                  "php-fpm php-curl"      "PHP-FPM"
 _ensure_pkg ufw                  "ufw"                   "UFW firewall"
+_ensure_pkg mpg123               "mpg123"                "MP3 decoder (IVR audio playback)"
 
 # ---------------------------------------------------------------------------
 # 2b. Copy setup wizard files

@@ -141,9 +141,7 @@ function convert_to_wav($mp3_file) {
 agi('ANSWER');
 agi('SET VARIABLE CHANNEL_ANSWERED 1');
 
-// ─ Start call recording (MixMonitor — background, both legs) ─────────────────
-// File is written to /tmp/ and uploaded by the runtime sync script after the
-// call ends.  Using the Asterisk UNIQUEID keeps filenames collision-free.
+// ─ Capture UNIQUEID for recording filename ────────────────────────────────────
 $_uniq_resp = agi('GET VARIABLE UNIQUEID');
 $_uniqueid  = '';
 if (preg_match('/\(([^)]+)\)/', $_uniq_resp, $_um)) {
@@ -153,7 +151,6 @@ if (!$_uniqueid) {
     $_uniqueid = 'inb_' . time() . '_' . rand(1000, 9999);
 }
 $rec_file = '/tmp/qualid_rec_' . $_uniqueid;
-agi("EXEC MixMonitor {$rec_file}.wav,b");
 
 // ─ Start session ─────────────────────────────────────────────────────────────
 $start_resp = api_post('/ivr/agi/start', [
@@ -169,6 +166,14 @@ if (empty($start_resp['success']) || empty($start_resp['instruction'])) {
 
 $session_id  = $start_resp['session_id'] ?? null;
 $instruction = $start_resp['instruction'];
+
+// ─ Start call recording (MixMonitor — background, both legs) ─────────────────
+// record_calls defaults to true so existing deployments keep recording until
+// the backend is updated to return the flag explicitly.
+$record_calls = !array_key_exists('record_calls', $start_resp) || (bool)$start_resp['record_calls'];
+if ($record_calls) {
+    agi("EXEC MixMonitor {$rec_file}.wav,b");
+}
 $hangup_cause = 'normal';
 
 // ─ Main execution loop ────────────────────────────────────────────────────────
@@ -493,7 +498,8 @@ if ($session_id) {
 // ─ Drop recording metadata for the runtime sync to pick up ───────────────────
 // MixMonitor keeps writing until the channel closes.  The sync script uploads
 // the file once it has been untouched for 60 seconds (call fully ended).
-if ($session_id && isset($rec_file)) {
+// Only write the metadata if recording was actually started for this call.
+if ($record_calls && $session_id && isset($rec_file)) {
     file_put_contents($rec_file . '.json', json_encode([
         'session_id' => $session_id,
         'call_type'  => 'inbound',
