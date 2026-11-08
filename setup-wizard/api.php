@@ -341,7 +341,7 @@ if ($action === 'diagnose') {
             preg_match_all('/^; --- (.+?) ---$/m', (string)file_get_contents($gatewayConf), $usernames);
             $gwRegistered = 0;
             foreach ($usernames[1] as $gwUser) {
-                if (preg_match('/^' . preg_quote($gwUser, '/') . '\//m', $contactsOut)) {
+                if (preg_match('/' . preg_quote($gwUser, '/') . '\//i', $contactsOut)) {
                     $gwRegistered++;
                 }
             }
