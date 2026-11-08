@@ -489,6 +489,11 @@ while (true) {
     break;
 }
 
+// ─ Stop recording before hangup tones play ───────────────────────────────────
+if ($record_calls && isset($rec_file)) {
+    agi("EXEC StopMixMonitor");
+}
+
 // ─ End session ────────────────────────────────────────────────────────────────
 if ($session_id) {
     api_post('/ivr/agi/end', [

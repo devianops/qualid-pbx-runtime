@@ -427,6 +427,11 @@ while ($step_num++ <= $max_steps) {
 
 agi_verbose("[outbound] Loop ended — hangup_cause=$hangup_cause");
 
+// ─ Stop recording before hangup tones play ───────────────────────────────────
+if (isset($rec_file)) {
+    agi_cmd("EXEC StopMixMonitor");
+}
+
 // ── 8. POST /outbound/agi/end ────────────────────────────────────────────────
 if ($ob_session_id) {
     ob_post($api_base . '/outbound/agi/end', [
