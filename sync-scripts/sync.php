@@ -22,6 +22,7 @@ qualid_write_rtp_conf();   // Rotate TURN credentials (24h TTL, refreshed every 
 qualid_push_pbx_host($token);
 qualid_sync_extensions($token);
 qualid_sync_queues($token);
+qualid_sync_gateways($token);
 qualid_sync_cdr_to_qualid($token);
 qualid_send_heartbeat($token);
 qualid_sync_outbound($token);    // Dispatch pending outbound campaign calls
