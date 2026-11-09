@@ -71,11 +71,18 @@ def load_config():
         log.warning("No ami_monitor_secret in config — run sync to generate it")
         return None
 
+    device_id = cfg.get('device_id', '')
+    if not device_id:
+        # Derive a stable device_id from the token so existing deployments
+        # without an explicit device_id in config still work.
+        device_id = 'dev_' + hashlib.sha256(token.encode()).hexdigest()[:16]
+
     return {
         'token':      token,
         'ami_secret': ami_secret,
         'relay_host': relay_host,
         'relay_port': relay_port,
+        'device_id':  device_id,
     }
 
 
@@ -292,8 +299,9 @@ class AmiClient:
 # State — in-memory active calls (keyed by Asterisk Uniqueid)
 # ---------------------------------------------------------------------------
 
-_active_calls = {}   # uniqueid → { queue, caller, agent_ext, started_at, answered_at }
-_state_lock   = threading.Lock()
+_active_calls    = {}   # uniqueid → { queue, caller, agent_ext, started_at, answered_at, channel }
+_state_lock      = threading.Lock()
+_monitor_threads = {}   # call_id → threading.Event (stop signal for FIFO reader)
 
 
 def _now_iso():
@@ -340,9 +348,12 @@ def handle_event(event, ws_sock, ws_lock):
 
     elif evt == 'AgentConnect':
         uniqueid = event.get('Uniqueid', '')
+        channel  = event.get('Channel', '')
         with _state_lock:
             if uniqueid in _active_calls:
                 _active_calls[uniqueid]['answered_at'] = _now_iso()
+                if channel:
+                    _active_calls[uniqueid]['channel'] = channel
         payload = json.dumps({
             'type':      'call_answered',
             'call_id':   uniqueid,
@@ -353,7 +364,10 @@ def handle_event(event, ws_sock, ws_lock):
     elif evt in ('AgentComplete', 'AgentDump', 'AgentRingNoAnswer'):
         uniqueid = event.get('Uniqueid', '')
         with _state_lock:
-            _active_calls.pop(uniqueid, None)
+            call = _active_calls.pop(uniqueid, {})
+        # Signal any active monitor reader to stop (Asterisk also closes the FIFO
+        # automatically when the channel hangs up, but set the event for safety).
+        _stop_mixmonitor(uniqueid, call.get('channel', ''), ami=None)
         payload = json.dumps({
             'type':      'call_end',
             'call_id':   uniqueid,
@@ -376,10 +390,101 @@ def _ws_push(ws_sock, ws_lock, payload):
 
 
 # ---------------------------------------------------------------------------
+# Live audio monitoring — MixMonitor + named FIFO
+# ---------------------------------------------------------------------------
+
+def _start_mixmonitor(call_id, channel, ami, ws_sock, ws_lock):
+    """Start MixMonitor for call_id on channel, stream PCM chunks to relay."""
+    if call_id in _monitor_threads:
+        return   # already monitoring this call
+    fifo_path = f'/tmp/qualid_monitor_{call_id}.slin'
+    try:
+        if os.path.exists(fifo_path):
+            os.unlink(fifo_path)
+        os.mkfifo(fifo_path)
+    except Exception as e:
+        log.warning("Could not create FIFO %s: %s", fifo_path, e)
+        return
+
+    stop_evt = threading.Event()
+    _monitor_threads[call_id] = stop_evt
+
+    def _reader():
+        try:
+            # open() blocks until Asterisk opens the FIFO for writing (MixMonitor start)
+            with open(fifo_path, 'rb') as f:
+                while not stop_evt.is_set():
+                    chunk = f.read(320)   # 20 ms @ 8 kHz 16-bit slin
+                    if not chunk:
+                        break
+                    payload = json.dumps({
+                        'type':    'audio_chunk',
+                        'call_id': call_id,
+                        'data':    base64.b64encode(chunk).decode(),
+                    })
+                    _ws_push(ws_sock, ws_lock, payload)
+        except Exception as e:
+            log.warning("Monitor reader error (call %s): %s", call_id, e)
+        finally:
+            try:
+                os.unlink(fifo_path)
+            except Exception:
+                pass
+            _monitor_threads.pop(call_id, None)
+            log.info("Monitor reader exited — call %s", call_id)
+
+    t = threading.Thread(target=_reader, daemon=True)
+    t.start()
+    # Send MixMonitor AFTER the reader thread is started — the reader's open()
+    # call will block until Asterisk opens the write end of the FIFO.
+    ami._send({
+        'Action':  'MixMonitor',
+        'Channel': channel,
+        'File':    fifo_path,
+        'Options': 'b',   # mix both directions into one stream
+    })
+    log.info("MixMonitor started — call %s channel %s", call_id, channel)
+
+
+def _stop_mixmonitor(call_id, channel, ami):
+    """Signal the reader thread to stop and optionally send StopMixMonitor to Asterisk."""
+    stop_evt = _monitor_threads.pop(call_id, None)
+    if stop_evt:
+        stop_evt.set()
+    if ami and channel:
+        try:
+            ami._send({'Action': 'StopMixMonitor', 'Channel': channel})
+        except Exception:
+            pass
+    log.info("MixMonitor stopped — call %s", call_id)
+
+
+def handle_relay_command(msg, ami_ref, ws_sock, ws_lock):
+    """Handle incoming commands pushed from the relay to ami_bridge."""
+    cmd = msg.get('type', '')
+    if cmd == 'start_monitor':
+        call_id = msg.get('call_id', '')
+        with _state_lock:
+            call = _active_calls.get(call_id, {})
+        channel = call.get('channel', '')
+        ami     = ami_ref[0]
+        if channel and ami:
+            _start_mixmonitor(call_id, channel, ami, ws_sock, ws_lock)
+        else:
+            log.warning("start_monitor: no channel or AMI for call %s", call_id)
+    elif cmd == 'stop_monitor':
+        call_id = msg.get('call_id', '')
+        with _state_lock:
+            call = _active_calls.get(call_id, {})
+        channel = call.get('channel', '')
+        _stop_mixmonitor(call_id, channel, ami_ref[0])
+
+
+# ---------------------------------------------------------------------------
 # Relay WebSocket thread
 # ---------------------------------------------------------------------------
 
-def relay_thread(cfg, ws_sock, ws_lock):
+def relay_thread(cfg, ws_sock, ws_lock, ami_ref):
     """
     Background thread: maintains the WebSocket connection to the relay.
     ws_sock is a list of [socket_or_None] shared with the main thread.
@@ -387,24 +492,31 @@ def relay_thread(cfg, ws_sock, ws_lock):
     backoff = RECONNECT_MIN
     while True:
         try:
+            path = f'{RELAY_WS_PATH}?device_id={cfg["device_id"]}'
             sock = ws_connect(
                 cfg['relay_host'],
                 cfg['relay_port'],
-                RELAY_WS_PATH,
+                path,
                 headers={'Authorization': f'Bearer {cfg["token"]}'},
             )
             with ws_lock:
                 ws_sock[0] = sock
             backoff = RECONNECT_MIN
-            log.info("Relay WebSocket connected")
+            log.info("Relay WebSocket connected (device_id=%s)", cfg['device_id'])
 
-            # Keep-alive loop: relay may push messages (pings) or close
+            # Keep-alive loop: relay may push commands or pings
             last_ping = time.time()
             while True:
-                # Non-blocking check for incoming frames (pong/close)
+                # Non-blocking check for incoming frames
                 sock.settimeout(1.0)
                 try:
-                    ws_recv(sock)
+                    opcode, text = ws_recv(sock)
+                    if opcode == 0x01 and text:
+                        try:
+                            msg = json.loads(text)
+                            handle_relay_command(msg, ami_ref, ws_sock, ws_lock)
+                        except Exception as e:
+                            log.warning("Relay command error: %s", e)
                 except socket.timeout:
                     pass
                 except ConnectionError as e:
@@ -452,11 +564,12 @@ def main():
             continue
 
         # Shared mutable socket reference — relay thread writes, main thread reads
-        ws_sock = [None]
-        ws_lock = threading.Lock()
+        ws_sock  = [None]
+        ws_lock  = threading.Lock()
+        ami_ref  = [None]   # relay_thread uses this to send AMI actions for monitoring
 
         # Start relay WebSocket thread
-        t = threading.Thread(target=relay_thread, args=(cfg, ws_sock, ws_lock), daemon=True)
+        t = threading.Thread(target=relay_thread, args=(cfg, ws_sock, ws_lock, ami_ref), daemon=True)
         t.start()
 
         # Wait for initial relay connection (up to 30s)
@@ -471,11 +584,13 @@ def main():
         while True:
             try:
                 ami.connect()
+                ami_ref[0] = ami   # relay_thread can now send AMI actions
                 ami_backoff = RECONNECT_MIN
                 for event in ami.events():
                     handle_event(event, ws_sock, ws_lock)
             except Exception as e:
                 log.warning("AMI error: %s — retry in %ds", e, ami_backoff)
+                ami_ref[0] = None  # prevent relay_thread from using a dead connection
                 ami.close()
                 time.sleep(ami_backoff)
                 ami_backoff = min(ami_backoff * 2, RECONNECT_MAX)
