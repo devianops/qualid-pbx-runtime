@@ -422,17 +422,26 @@ def _start_mixmonitor(call_id, channel, ami, ws_sock, ws_lock):
         if os.path.exists(fifo_path):
             os.unlink(fifo_path)
         os.mkfifo(fifo_path)
+        # Asterisk runs as a different user (asterisk) than ami_bridge (qualid).
+        # Without chmod, the FIFO is only writable by the owner (qualid), so
+        # Asterisk gets EACCES and silently fails to open the write end.
+        os.chmod(fifo_path, 0o666)
     except Exception as e:
         log.warning("Could not create FIFO %s: %s", fifo_path, e)
         return
 
-    stop_evt = threading.Event()
+    stop_evt    = threading.Event()
+    reader_ready = threading.Event()
     _monitor_threads[call_id] = stop_evt
 
     def _reader():
         try:
-            # open() blocks until Asterisk opens the FIFO for writing (MixMonitor start)
+            # Signal we are about to block in open() — main thread waits for
+            # this before sending MixMonitor so Asterisk never races against us.
+            reader_ready.set()
+            # open() blocks here until Asterisk opens the FIFO for writing.
             with open(fifo_path, 'rb') as f:
+                log.info("Monitor FIFO opened — call %s (reader unblocked)", call_id)
                 while not stop_evt.is_set():
                     chunk = f.read(320)   # 20 ms @ 8 kHz 16-bit slin
                     if not chunk:
@@ -455,15 +464,17 @@ def _start_mixmonitor(call_id, channel, ami, ws_sock, ws_lock):
 
     t = threading.Thread(target=_reader, daemon=True)
     t.start()
-    # Send MixMonitor AFTER the reader thread is started — the reader's open()
-    # call will block until Asterisk opens the write end of the FIFO.
+    # Wait until the reader thread has signalled it is about to call open(),
+    # then send MixMonitor. This prevents the race condition where Asterisk
+    # tries to open the write end before our reader is waiting on the read end.
+    reader_ready.wait(timeout=1.0)
     ami._send({
         'Action':  'MixMonitor',
         'Channel': channel,
         'File':    fifo_path,
         'Options': 'b',   # mix both directions into one stream
     })
-    log.info("MixMonitor started — call %s channel %s", call_id, channel)
+    log.info("MixMonitor sent — call %s channel %s fifo %s", call_id, channel, fifo_path)
 
 
 def _stop_mixmonitor(call_id, channel, ami):
