@@ -308,6 +308,21 @@ def _now_iso():
     return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
 
 
+def _best_channel(*channels):
+    """
+    Return the first real (non-Local) channel from the candidates.
+    Asterisk queue AgentConnect often carries a Local/XXX@from-queue leg as
+    Channel; the actual PJSIP/SIP channel may be in Peer or DestChannel.
+    """
+    for ch in channels:
+        if ch and not ch.lower().startswith('local/'):
+            return ch
+    for ch in channels:
+        if ch:
+            return ch
+    return ''
+
+
 # ---------------------------------------------------------------------------
 # Event handler
 # ---------------------------------------------------------------------------
@@ -347,13 +362,18 @@ def handle_event(event, ws_sock, ws_lock):
         _ws_push(ws_sock, ws_lock, payload)
 
     elif evt == 'AgentConnect':
-        uniqueid = event.get('Uniqueid', '')
-        channel  = event.get('Channel', '')
+        uniqueid     = event.get('Uniqueid', '')
+        channel      = event.get('Channel', '')
+        peer         = event.get('Peer', '')
+        dest_channel = event.get('DestChannel', '')
+        best_ch      = _best_channel(channel, peer, dest_channel)
+        log.info("AgentConnect — call=%s Channel=%r Peer=%r DestChannel=%r → monitor=%r",
+                 uniqueid, channel, peer, dest_channel, best_ch)
         with _state_lock:
             if uniqueid in _active_calls:
                 _active_calls[uniqueid]['answered_at'] = _now_iso()
-                if channel:
-                    _active_calls[uniqueid]['channel'] = channel
+                if best_ch:
+                    _active_calls[uniqueid]['channel'] = best_ch
         payload = json.dumps({
             'type':      'call_answered',
             'call_id':   uniqueid,
@@ -464,16 +484,22 @@ def handle_relay_command(msg, ami_ref, ws_sock, ws_lock):
     cmd = msg.get('type', '')
     if cmd == 'start_monitor':
         call_id = msg.get('call_id', '')
+        log.info("start_monitor received — call=%s", call_id)
         with _state_lock:
-            call = _active_calls.get(call_id, {})
+            call    = dict(_active_calls.get(call_id, {}))
+            known   = list(_active_calls.keys())
         channel = call.get('channel', '')
         ami     = ami_ref[0]
+        log.info("start_monitor — call=%s channel=%r ami_ready=%s known_calls=%s",
+                 call_id, channel, ami is not None, known)
         if channel and ami:
             _start_mixmonitor(call_id, channel, ami, ws_sock, ws_lock)
         else:
-            log.warning("start_monitor: no channel or AMI for call %s", call_id)
+            log.warning("start_monitor: cannot start — call=%s channel=%r ami_ready=%s",
+                        call_id, channel, ami is not None)
     elif cmd == 'stop_monitor':
         call_id = msg.get('call_id', '')
+        log.info("stop_monitor received — call=%s", call_id)
         with _state_lock:
             call = _active_calls.get(call_id, {})
         channel = call.get('channel', '')
