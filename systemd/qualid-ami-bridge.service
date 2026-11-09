@@ -1,0 +1,31 @@
+[Unit]
+Description=Quali-D AMI Bridge — Asterisk call events to relay WebSocket
+After=network-online.target asterisk.service
+Wants=network-online.target
+# Restart after the sync service so config.json is populated first
+After=qualid-sync.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/share/qualid/ami_bridge/ami_bridge.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=qualid-ami-bridge
+
+# Run as asterisk user so it can read /etc/qualid/config.json
+User=asterisk
+Group=asterisk
+
+# Sandboxing
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/usr/share/qualid /etc/qualid
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
