@@ -34,7 +34,7 @@ AMI_HOST       = '127.0.0.1'
 AMI_PORT       = 5038
 AMI_USERNAME   = 'qualid-monitor'
 RELAY_WS_PATH  = '/ami-bridge'
-RELAY_WS_PORT  = 3000
+RELAY_WS_PORT  = 443
 RECONNECT_MIN  = 5    # seconds
 RECONNECT_MAX  = 60   # seconds
 PING_INTERVAL  = 30   # seconds
@@ -96,12 +96,18 @@ def _recv_exact(sock, n):
 
 def ws_connect(host, port, path, headers=None):
     """
-    Open a WebSocket connection.
-    Returns the connected socket (plain TCP — TLS not needed for internal relay).
+    Open a WebSocket connection (plain TCP or TLS depending on port).
+    Port 443 → WSS (TLS); anything else → plain WS.
     """
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(15)
-    sock.connect((host, port))
+    raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    raw_sock.settimeout(15)
+    raw_sock.connect((host, port))
+
+    if port == 443:
+        ctx = ssl.create_default_context()
+        sock = ctx.wrap_socket(raw_sock, server_hostname=host)
+    else:
+        sock = raw_sock
 
     # Generate a random Sec-WebSocket-Key
     ws_key = base64.b64encode(os.urandom(16)).decode()
@@ -112,9 +118,10 @@ def ws_connect(host, port, path, headers=None):
         for k, v in headers.items():
             extra_headers += f'{k}: {v}\r\n'
 
+    host_header = host if port in (80, 443) else f'{host}:{port}'
     request = (
         f'GET {path} HTTP/1.1\r\n'
-        f'Host: {host}:{port}\r\n'
+        f'Host: {host_header}\r\n'
         f'Upgrade: websocket\r\n'
         f'Connection: Upgrade\r\n'
         f'Sec-WebSocket-Key: {ws_key}\r\n'
