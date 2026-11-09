@@ -414,38 +414,54 @@ def _ws_push(ws_sock, ws_lock, payload):
 # ---------------------------------------------------------------------------
 
 def _start_mixmonitor(call_id, channel, ami, ws_sock, ws_lock):
-    """Start MixMonitor for call_id on channel, stream PCM chunks to relay."""
+    """Start MixMonitor for call_id on channel, stream PCM chunks to relay.
+
+    Uses a regular file (not a FIFO): Asterisk's ast_writefile layer checks
+    S_ISREG() and rejects named pipes.  The reader thread tail-follows the
+    file (like `tail -f`) until the call ends or stop is requested.
+    """
     if call_id in _monitor_threads:
         return   # already monitoring this call
-    fifo_path = f'/tmp/qualid_monitor_{call_id}.sln'
-    try:
-        if os.path.exists(fifo_path):
-            os.unlink(fifo_path)
-        os.mkfifo(fifo_path)
-        # Asterisk runs as a different user (asterisk) than ami_bridge (qualid).
-        # Without chmod, the FIFO is only writable by the owner (qualid), so
-        # Asterisk gets EACCES and silently fails to open the write end.
-        os.chmod(fifo_path, 0o666)
-    except Exception as e:
-        log.warning("Could not create FIFO %s: %s", fifo_path, e)
-        return
+    file_path = f'/tmp/qualid_monitor_{call_id}.sln'
 
-    stop_evt    = threading.Event()
-    reader_ready = threading.Event()
+    # Remove any leftover file or FIFO from a previous attempt
+    try:
+        if os.path.exists(file_path):
+            os.unlink(file_path)
+    except Exception as e:
+        log.warning("Could not remove old monitor file %s: %s", file_path, e)
+
+    stop_evt = threading.Event()
     _monitor_threads[call_id] = stop_evt
 
     def _reader():
+        fd = -1
         try:
-            # Signal we are about to block in open() — main thread waits for
-            # this before sending MixMonitor so Asterisk never races against us.
-            reader_ready.set()
-            # open() blocks here until Asterisk opens the FIFO for writing.
-            with open(fifo_path, 'rb') as f:
-                log.info("Monitor FIFO opened — call %s (reader unblocked)", call_id)
-                while not stop_evt.is_set():
-                    chunk = f.read(320)   # 20 ms @ 8 kHz 16-bit slin
-                    if not chunk:
-                        break
+            # Wait for Asterisk to create the file via MixMonitor O_CREAT
+            deadline = time.time() + 15.0
+            while not os.path.exists(file_path):
+                if stop_evt.is_set() or time.time() > deadline:
+                    log.warning("Monitor file never appeared — call %s", call_id)
+                    return
+                time.sleep(0.05)
+
+            fd = os.open(file_path, os.O_RDONLY)
+            log.info("Monitor file opened — call %s (Asterisk is writing)", call_id)
+            buf = b''
+            while not stop_evt.is_set():
+                try:
+                    data = os.read(fd, 320 - len(buf))
+                except OSError as e:
+                    log.warning("Monitor read error (call %s): %s", call_id, e)
+                    break
+                if data:
+                    buf += data
+                else:
+                    time.sleep(0.005)   # EOF — Asterisk hasn't written yet, poll
+                    continue
+                while len(buf) >= 320:
+                    chunk = buf[:320]
+                    buf = buf[320:]
                     payload = json.dumps({
                         'type':    'audio_chunk',
                         'call_id': call_id,
@@ -455,8 +471,13 @@ def _start_mixmonitor(call_id, channel, ami, ws_sock, ws_lock):
         except Exception as e:
             log.warning("Monitor reader error (call %s): %s", call_id, e)
         finally:
+            if fd >= 0:
+                try:
+                    os.close(fd)
+                except Exception:
+                    pass
             try:
-                os.unlink(fifo_path)
+                os.unlink(file_path)
             except Exception:
                 pass
             _monitor_threads.pop(call_id, None)
@@ -464,17 +485,15 @@ def _start_mixmonitor(call_id, channel, ami, ws_sock, ws_lock):
 
     t = threading.Thread(target=_reader, daemon=True)
     t.start()
-    # Wait until the reader thread has signalled it is about to call open(),
-    # then send MixMonitor. This prevents the race condition where Asterisk
-    # tries to open the write end before our reader is waiting on the read end.
-    reader_ready.wait(timeout=1.0)
+    # Send MixMonitor — Asterisk will create the file and start writing PCM.
+    # The reader thread polls for file existence so there is no open() race.
     ami._send({
         'Action':  'MixMonitor',
         'Channel': channel,
-        'File':    fifo_path,
+        'File':    file_path,
         'Options': 'b',   # mix both directions into one stream
     })
-    log.info("MixMonitor sent — call %s channel %s fifo %s", call_id, channel, fifo_path)
+    log.info("MixMonitor sent — call %s channel %s file %s", call_id, channel, file_path)
 
 
 def _stop_mixmonitor(call_id, channel, ami):
