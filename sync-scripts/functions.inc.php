@@ -932,6 +932,25 @@ function qualid_collect_device_metrics() {
         ? trim(@file_get_contents($activated_file))
         : null;
 
+    // Disk usage for key mount points (/, /tmp, /var/spool/asterisk)
+    $df_raw = function_exists('shell_exec')
+        ? @shell_exec("df -P / /tmp /var/spool/asterisk 2>/dev/null")
+        : null;
+    $metrics['disk'] = [];
+    if ($df_raw) {
+        $lines = array_slice(explode("\n", trim($df_raw)), 1); // skip header
+        foreach ($lines as $line) {
+            $parts = preg_split('/\s+/', trim($line));
+            if (count($parts) >= 6) {
+                $metrics['disk'][] = [
+                    'mount'    => $parts[5],
+                    'used_pct' => (int) rtrim($parts[4], '%'),
+                    'avail_kb' => (int) $parts[3],
+                ];
+            }
+        }
+    }
+
     return $metrics;
 }
 

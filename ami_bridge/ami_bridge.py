@@ -24,20 +24,25 @@ import ssl
 import string
 import threading
 import time
+import urllib.request
+import urllib.error
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
-CONFIG_PATH    = '/etc/qualid/config.json'
-AMI_HOST       = '127.0.0.1'
-AMI_PORT       = 5038
-AMI_USERNAME   = 'qualid-monitor'
-RELAY_WS_PATH  = '/ami-bridge'
-RELAY_WS_PORT  = 3000
-RECONNECT_MIN  = 5    # seconds
-RECONNECT_MAX  = 60   # seconds
-PING_INTERVAL  = 30   # seconds
+CONFIG_PATH         = '/etc/qualid/config.json'
+DEVICE_UUID_PATH    = '/etc/qualid/device_uuid'
+QUALID_API_URL      = 'https://api.quali-d.com'
+AMI_HOST            = '127.0.0.1'
+AMI_PORT            = 5038
+AMI_USERNAME        = 'qualid-monitor'
+RELAY_WS_PATH       = '/ami-bridge'
+RELAY_WS_PORT       = 3000
+RECONNECT_MIN       = 5    # seconds
+RECONNECT_MAX       = 60   # seconds
+PING_INTERVAL       = 30   # seconds
+QUEUE_STATS_INTERVAL = 30  # seconds between queue snapshots
 
 logging.basicConfig(
     level=logging.INFO,
@@ -77,12 +82,23 @@ def load_config():
         # without an explicit device_id in config still work.
         device_id = 'dev_' + hashlib.sha256(token.encode()).hexdigest()[:16]
 
+    # device_uuid: read from dedicated file (same source as PHP heartbeat)
+    device_uuid = cfg.get('device_uuid', '')
+    if not device_uuid:
+        try:
+            with open(DEVICE_UUID_PATH) as fh:
+                device_uuid = fh.read().strip()
+        except Exception:
+            pass
+
     return {
-        'token':      token,
-        'ami_secret': ami_secret,
-        'relay_host': relay_host,
-        'relay_port': relay_port,
-        'device_id':  device_id,
+        'token':       token,
+        'ami_secret':  ami_secret,
+        'relay_host':  relay_host,
+        'relay_port':  relay_port,
+        'device_id':   device_id,
+        'device_uuid': device_uuid,
+        'api_url':     cfg.get('api_url', QUALID_API_URL),
     }
 
 
@@ -302,6 +318,9 @@ class AmiClient:
 _active_calls    = {}   # uniqueid → { queue, caller, agent_ext, started_at, answered_at, channel }
 _state_lock      = threading.Lock()
 _monitor_threads = {}   # call_id → threading.Event (stop signal for FIFO reader)
+_queue_stats     = {}   # queue_name → latest QueueSummary snapshot dict
+_queue_counters  = {}   # queue_name → { abandoned_today, completed_today }
+_queue_stats_lock = threading.Lock()
 
 
 def _now_iso():
@@ -388,6 +407,13 @@ def handle_event(event, ws_sock, ws_lock):
         # Signal any active monitor reader to stop (Asterisk also closes the FIFO
         # automatically when the channel hangs up, but set the event for safety).
         _stop_mixmonitor(uniqueid, call.get('channel', ''), ami=None)
+        # Track completed calls for daily queue counters
+        if evt == 'AgentComplete':
+            qname = call.get('queue', '')
+            if qname:
+                with _queue_stats_lock:
+                    cnt = _queue_counters.setdefault(qname, {})
+                    cnt['completed_today'] = cnt.get('completed_today', 0) + 1
         payload = json.dumps({
             'type':      'call_end',
             'call_id':   uniqueid,
@@ -395,6 +421,38 @@ def handle_event(event, ws_sock, ws_lock):
             'timestamp': _now_iso(),
         })
         _ws_push(ws_sock, ws_lock, payload)
+
+    elif evt == 'QueueCallerAbandon':
+        # Caller hung up while waiting in queue (before connecting to an agent)
+        qname = event.get('Queue', '')
+        if qname:
+            with _queue_stats_lock:
+                cnt = _queue_counters.setdefault(qname, {})
+                cnt['abandoned_today'] = cnt.get('abandoned_today', 0) + 1
+
+    elif evt == 'QueueSummary':
+        # Response event from "Action: QueueSummary" — one per queue
+        qname = event.get('Queue', '')
+        if qname:
+            with _state_lock:
+                active = sum(
+                    1 for c in _active_calls.values()
+                    if c.get('queue') == qname and c.get('answered_at')
+                )
+            with _queue_stats_lock:
+                cnt = _queue_counters.get(qname, {})
+                _queue_stats[qname] = {
+                    'name':           qname,
+                    'waiting':        int(event.get('Callers', 0)),
+                    'agents_online':  int(event.get('LoggedIn', 0)),
+                    'agents_avail':   int(event.get('Available', 0)),
+                    'avg_wait_sec':   int(event.get('HoldTime', 0)),
+                    'max_wait_sec':   int(event.get('LongestHoldTime', 0)),
+                    'sla_pct':        float(event.get('ServicelevelPerf') or 0),
+                    'active_calls':   active,
+                    'abandoned_today': cnt.get('abandoned_today', 0),
+                    'completed_today': cnt.get('completed_today', 0),
+                }
 
 
 def _ws_push(ws_sock, ws_lock, payload):
@@ -537,6 +595,82 @@ def handle_relay_command(msg, ami_ref, ws_sock, ws_lock):
 
 
 # ---------------------------------------------------------------------------
+# Queue stats — periodic snapshot → Quali-D API
+# ---------------------------------------------------------------------------
+
+def _post_to_api(api_url, token, path, payload_dict):
+    """POST JSON to the Quali-D REST API using stdlib urllib.  Returns response bytes or None."""
+    url  = api_url.rstrip('/') + path
+    data = json.dumps(payload_dict).encode('utf-8')
+    req  = urllib.request.Request(url, data=data, method='POST')
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Authorization', f'Bearer {token}')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as e:
+        log.warning("API POST %s → HTTP %s: %s", path, e.code, e.read()[:200])
+        return None
+    except Exception as e:
+        log.warning("API POST %s failed: %s", path, e)
+        return None
+
+
+def _queue_stats_thread(cfg_ref, ami_ref):
+    """
+    Background thread: every QUEUE_STATS_INTERVAL seconds —
+      1. Send QueueSummary AMI action (handle_event populates _queue_stats)
+      2. POST the snapshot to POST /ivr/queue-stats on the Quali-D API
+    Resets abandoned_today / completed_today counters at midnight.
+    """
+    today = time.strftime('%Y-%m-%d')
+    while True:
+        time.sleep(QUEUE_STATS_INTERVAL)
+        try:
+            # Reset daily counters at midnight
+            current_day = time.strftime('%Y-%m-%d')
+            if current_day != today:
+                with _queue_stats_lock:
+                    for qname in list(_queue_counters.keys()):
+                        _queue_counters[qname] = {}
+                today = current_day
+
+            current_cfg = cfg_ref[0]
+            if not current_cfg:
+                continue
+
+            api_url     = current_cfg.get('api_url', QUALID_API_URL)
+            token       = current_cfg.get('token', '')
+            device_uuid = current_cfg.get('device_uuid', '')
+            if not token:
+                continue
+
+            # Ask Asterisk for a fresh queue summary;
+            # QueueSummary events arrive in handle_event() and populate _queue_stats.
+            ami = ami_ref[0]
+            if ami:
+                try:
+                    ami._send({'Action': 'QueueSummary'})
+                except Exception as e:
+                    log.warning("QueueSummary action failed: %s", e)
+                # Give Asterisk time to respond before reading _queue_stats
+                time.sleep(2)
+
+            with _queue_stats_lock:
+                queues = list(_queue_stats.values())
+
+            if queues:
+                result = _post_to_api(api_url, token, '/ivr/queue-stats', {
+                    'device_uuid': device_uuid,
+                    'queues':      queues,
+                })
+                if result is not None:
+                    log.debug("Queue stats posted — %d queue(s)", len(queues))
+        except Exception as e:
+            log.warning("Queue stats thread error: %s", e)
+
+
+# ---------------------------------------------------------------------------
 # Relay WebSocket thread
 # ---------------------------------------------------------------------------
 
@@ -619,14 +753,19 @@ def main():
             time.sleep(60)
             continue
 
-        # Shared mutable socket reference — relay thread writes, main thread reads
+        # Shared mutable references — threads read/write via list wrapper
         ws_sock  = [None]
         ws_lock  = threading.Lock()
-        ami_ref  = [None]   # relay_thread uses this to send AMI actions for monitoring
+        ami_ref  = [None]   # relay_thread / queue_stats_thread use this to send AMI actions
+        cfg_ref  = [cfg]    # queue_stats_thread reloads token/uuid from here
 
         # Start relay WebSocket thread
         t = threading.Thread(target=relay_thread, args=(cfg, ws_sock, ws_lock, ami_ref), daemon=True)
         t.start()
+
+        # Start queue stats background thread
+        qt = threading.Thread(target=_queue_stats_thread, args=(cfg_ref, ami_ref), daemon=True)
+        qt.start()
 
         # Wait for initial relay connection (up to 30s)
         for _ in range(30):
@@ -655,6 +794,7 @@ def main():
                 new_cfg = load_config()
                 if new_cfg:
                     cfg = new_cfg
+                    cfg_ref[0] = new_cfg
 
 
 if __name__ == '__main__':
