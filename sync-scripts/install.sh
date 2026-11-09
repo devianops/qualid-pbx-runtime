@@ -391,18 +391,24 @@ AMICFG
             log "Added #include manager_qualid.conf to manager.conf"
         fi
 
+        # Ensure AMI is globally enabled in manager.conf
+        if grep -q "^enabled = no" "${ASTERISK_ETC}/manager.conf" 2>/dev/null; then
+            sed -i 's/^enabled = no/enabled = yes/' "${ASTERISK_ETC}/manager.conf"
+            log "AMI enabled in manager.conf"
+        fi
+
         # Reload AMI so the new user takes effect immediately
         if /usr/sbin/asterisk -rx "core show version" &>/dev/null; then
             /usr/sbin/asterisk -rx "manager reload" &>/dev/null || true
             log "Asterisk AMI reloaded."
         fi
 
-        # Enable and start the bridge service (only if config.json is provisioned)
+        # Enable and (re)start the bridge service
+        systemctl enable qualid-ami-bridge 2>/dev/null || true
         if [[ -f "${CONFIG_DIR}/config.json" ]]; then
-            systemctl enable --now qualid-ami-bridge 2>/dev/null || true
-            log "qualid-ami-bridge service enabled and started."
+            systemctl restart qualid-ami-bridge 2>/dev/null || true
+            log "qualid-ami-bridge service enabled and restarted."
         else
-            systemctl enable qualid-ami-bridge 2>/dev/null || true
             log "qualid-ami-bridge service registered (will start after provisioning)."
         fi
     fi

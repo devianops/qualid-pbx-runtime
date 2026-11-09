@@ -34,7 +34,7 @@ AMI_HOST       = '127.0.0.1'
 AMI_PORT       = 5038
 AMI_USERNAME   = 'qualid-monitor'
 RELAY_WS_PATH  = '/ami-bridge'
-RELAY_WS_PORT  = 443
+RELAY_WS_PORT  = 3000
 RECONNECT_MIN  = 5    # seconds
 RECONNECT_MAX  = 60   # seconds
 PING_INTERVAL  = 30   # seconds
@@ -61,7 +61,7 @@ def load_config():
 
     token = cfg.get('token', '')
     ami_secret = cfg.get('ami_monitor_secret', '')
-    relay_host = cfg.get('relay_host', 'qualidapi1.1215515.xyz')
+    relay_host = cfg.get('relay_host', '13.140.143.85')
     relay_port = int(cfg.get('relay_ws_port', RELAY_WS_PORT))
 
     if not token:
