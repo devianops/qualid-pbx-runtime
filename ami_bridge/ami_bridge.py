@@ -397,7 +397,7 @@ def _start_mixmonitor(call_id, channel, ami, ws_sock, ws_lock):
     """Start MixMonitor for call_id on channel, stream PCM chunks to relay."""
     if call_id in _monitor_threads:
         return   # already monitoring this call
-    fifo_path = f'/tmp/qualid_monitor_{call_id}.slin'
+    fifo_path = f'/tmp/qualid_monitor_{call_id}.sln'
     try:
         if os.path.exists(fifo_path):
             os.unlink(fifo_path)
