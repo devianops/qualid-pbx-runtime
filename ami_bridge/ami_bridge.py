@@ -645,7 +645,7 @@ def _do_trunk_test(gateway):
     transport = (gateway.get('transport') or 'udp').lower()
 
     if not host:
-        return {'status': 'fail', 'message': 'No host configured', 'dns_ms': None, 'latency_ms': None}
+        return {'status': 'fail', 'detail': 'No host configured', 'dns_ms': None, 'latency_ms': None}
 
     # 1. DNS resolution
     t0 = time.monotonic()
@@ -656,7 +656,7 @@ def _do_trunk_test(gateway):
         ip = infos[0][4][0]
         dns_ms = int((time.monotonic() - t0) * 1000)
     except Exception as e:
-        return {'status': 'fail', 'message': f'DNS error: {e}', 'dns_ms': None, 'latency_ms': None}
+        return {'status': 'fail', 'detail': f'DNS error: {e}', 'dns_ms': None, 'latency_ms': None}
 
     # 2. Connectivity probe
     t1 = time.monotonic()
@@ -676,13 +676,13 @@ def _do_trunk_test(gateway):
             latency_ms = int((time.monotonic() - t1) * 1000)
             return {
                 'status':     'ok',
-                'message':    f'Connected ({transport.upper()}) to {host}:{port} in {latency_ms}ms',
+                'detail':     f'Connected ({transport.upper()}) to {host}:{port} in {latency_ms}ms',
                 'dns_ms':     dns_ms,
                 'latency_ms': latency_ms,
             }
         except Exception as e:
             latency_ms = int((time.monotonic() - t1) * 1000)
-            return {'status': 'fail', 'message': f'TCP connect failed: {e}', 'dns_ms': dns_ms, 'latency_ms': latency_ms}
+            return {'status': 'fail', 'detail': f'TCP connect failed: {e}', 'dns_ms': dns_ms, 'latency_ms': latency_ms}
     else:
         # UDP — send a minimal SIP OPTIONS packet, wait up to 4s for any response
         call_id  = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
@@ -713,14 +713,14 @@ def _do_trunk_test(gateway):
                     code = first_line.split(' ', 2)[1] if ' ' in first_line else '?'
                     return {
                         'status':     'ok',
-                        'message':    f'SIP {code} from {host}:{port} in {latency_ms}ms',
+                        'detail':     f'SIP {code} from {host}:{port} in {latency_ms}ms',
                         'dns_ms':     dns_ms,
                         'latency_ms': latency_ms,
                     }
                 else:
                     return {
                         'status':     'ok',
-                        'message':    f'Response from {host}:{port} in {latency_ms}ms',
+                        'detail':     f'Response from {host}:{port} in {latency_ms}ms',
                         'dns_ms':     dns_ms,
                         'latency_ms': latency_ms,
                     }
@@ -729,13 +729,13 @@ def _do_trunk_test(gateway):
                 # No response — host could be reachable but filtered; report DNS ok, port unclear
                 return {
                     'status':     'fail',
-                    'message':    f'No SIP response from {host}:{port} (DNS ok, UDP timeout)',
+                    'detail':     f'No SIP response from {host}:{port} (DNS ok, UDP timeout)',
                     'dns_ms':     dns_ms,
                     'latency_ms': latency_ms,
                 }
         except Exception as e:
             latency_ms = int((time.monotonic() - t1) * 1000)
-            return {'status': 'fail', 'message': f'UDP probe error: {e}', 'dns_ms': dns_ms, 'latency_ms': latency_ms}
+            return {'status': 'fail', 'detail': f'UDP probe error: {e}', 'dns_ms': dns_ms, 'latency_ms': latency_ms}
         finally:
             try: s.close()
             except Exception: pass
