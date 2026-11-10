@@ -42,7 +42,8 @@ RELAY_WS_PORT       = 3000
 RECONNECT_MIN       = 5    # seconds
 RECONNECT_MAX       = 60   # seconds
 PING_INTERVAL       = 30   # seconds
-QUEUE_STATS_INTERVAL = 30  # seconds between queue snapshots
+QUEUE_STATS_INTERVAL  = 30  # seconds between queue snapshots
+TRUNK_TEST_INTERVAL   = 30  # seconds between pending-test polls
 
 logging.basicConfig(
     level=logging.INFO,
@@ -616,6 +617,174 @@ def _post_to_api(api_url, token, path, payload_dict):
         return None
 
 
+def _get_from_api(api_url, token, path):
+    """GET from the Quali-D REST API using stdlib urllib.  Returns parsed dict or None."""
+    url = api_url.rstrip('/') + path
+    req = urllib.request.Request(url)
+    req.add_header('Authorization', f'Bearer {token}')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        log.warning("API GET %s → HTTP %s: %s", path, e.code, e.read()[:200])
+        return None
+    except Exception as e:
+        log.warning("API GET %s failed: %s", path, e)
+        return None
+
+
+def _do_trunk_test(gateway):
+    """
+    Probe a gateway/trunk for connectivity.
+    Returns a dict: {status, message, dns_ms, latency_ms}
+    For UDP gateways: sends a minimal SIP OPTIONS and waits for any response.
+    For TCP/TLS gateways: attempts a TCP connect.
+    """
+    host      = (gateway.get('host') or '').strip()
+    port      = int(gateway.get('port') or 5060)
+    transport = (gateway.get('transport') or 'udp').lower()
+
+    if not host:
+        return {'status': 'fail', 'message': 'No host configured', 'dns_ms': None, 'latency_ms': None}
+
+    # 1. DNS resolution
+    t0 = time.monotonic()
+    try:
+        infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_DGRAM)
+        if not infos:
+            return {'status': 'fail', 'message': f'DNS resolution failed for {host}', 'dns_ms': None, 'latency_ms': None}
+        ip = infos[0][4][0]
+        dns_ms = int((time.monotonic() - t0) * 1000)
+    except Exception as e:
+        return {'status': 'fail', 'message': f'DNS error: {e}', 'dns_ms': None, 'latency_ms': None}
+
+    # 2. Connectivity probe
+    t1 = time.monotonic()
+    if transport in ('tcp', 'tls'):
+        # TCP connect
+        try:
+            sock_type = socket.SOCK_STREAM
+            s = socket.socket(socket.AF_INET6 if ':' in ip else socket.AF_INET, sock_type)
+            s.settimeout(5)
+            if transport == 'tls':
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                s = ctx.wrap_socket(s, server_hostname=host)
+            s.connect((ip, port))
+            s.close()
+            latency_ms = int((time.monotonic() - t1) * 1000)
+            return {
+                'status':     'ok',
+                'message':    f'Connected ({transport.upper()}) to {host}:{port} in {latency_ms}ms',
+                'dns_ms':     dns_ms,
+                'latency_ms': latency_ms,
+            }
+        except Exception as e:
+            latency_ms = int((time.monotonic() - t1) * 1000)
+            return {'status': 'fail', 'message': f'TCP connect failed: {e}', 'dns_ms': dns_ms, 'latency_ms': latency_ms}
+    else:
+        # UDP — send a minimal SIP OPTIONS packet, wait up to 4s for any response
+        call_id  = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+        tag      = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        branch   = ''.join(random.choices(string.ascii_lowercase + string.digits, k=12))
+        options  = (
+            f'OPTIONS sip:{host} SIP/2.0\r\n'
+            f'Via: SIP/2.0/UDP 0.0.0.0:5060;rport;branch=z9hG4bK{branch}\r\n'
+            f'From: <sip:probe@qualid-bridge>;tag={tag}\r\n'
+            f'To: <sip:{host}>\r\n'
+            f'Call-ID: {call_id}@qualid-bridge\r\n'
+            f'CSeq: 1 OPTIONS\r\n'
+            f'Max-Forwards: 70\r\n'
+            f'Content-Length: 0\r\n'
+            f'\r\n'
+        ).encode('utf-8')
+        try:
+            af = socket.AF_INET6 if ':' in ip else socket.AF_INET
+            s = socket.socket(af, socket.SOCK_DGRAM)
+            s.settimeout(4)
+            s.sendto(options, (ip, port))
+            try:
+                data, _ = s.recvfrom(4096)
+                latency_ms = int((time.monotonic() - t1) * 1000)
+                first_line = data.split(b'\r\n', 1)[0].decode('utf-8', errors='replace')
+                # Any SIP response (200, 403, 407, 405…) means the host is reachable
+                if first_line.startswith('SIP/2.0'):
+                    code = first_line.split(' ', 2)[1] if ' ' in first_line else '?'
+                    return {
+                        'status':     'ok',
+                        'message':    f'SIP {code} from {host}:{port} in {latency_ms}ms',
+                        'dns_ms':     dns_ms,
+                        'latency_ms': latency_ms,
+                    }
+                else:
+                    return {
+                        'status':     'ok',
+                        'message':    f'Response from {host}:{port} in {latency_ms}ms',
+                        'dns_ms':     dns_ms,
+                        'latency_ms': latency_ms,
+                    }
+            except socket.timeout:
+                latency_ms = int((time.monotonic() - t1) * 1000)
+                # No response — host could be reachable but filtered; report DNS ok, port unclear
+                return {
+                    'status':     'fail',
+                    'message':    f'No SIP response from {host}:{port} (DNS ok, UDP timeout)',
+                    'dns_ms':     dns_ms,
+                    'latency_ms': latency_ms,
+                }
+        except Exception as e:
+            latency_ms = int((time.monotonic() - t1) * 1000)
+            return {'status': 'fail', 'message': f'UDP probe error: {e}', 'dns_ms': dns_ms, 'latency_ms': latency_ms}
+        finally:
+            try: s.close()
+            except Exception: pass
+
+
+def _trunk_test_thread(cfg_ref):
+    """
+    Background thread: every TRUNK_TEST_INTERVAL seconds —
+      1. GET /ivr/gateways/pending-tests?device_uuid=…
+      2. For each queued gateway run _do_trunk_test()
+      3. POST result to /ivr/gateways/{id}/test-result
+    """
+    while True:
+        time.sleep(TRUNK_TEST_INTERVAL)
+        try:
+            current_cfg = cfg_ref[0]
+            if not current_cfg:
+                continue
+            api_url     = current_cfg.get('api_url', QUALID_API_URL)
+            token       = current_cfg.get('token', '')
+            device_uuid = current_cfg.get('device_uuid', '')
+            if not token:
+                continue
+
+            qs   = f'?device_uuid={device_uuid}' if device_uuid else ''
+            resp = _get_from_api(api_url, token, f'/ivr/gateways/pending-tests{qs}')
+            if not resp:
+                continue
+
+            gateways = resp.get('gateways') or []
+            if not gateways:
+                continue
+
+            log.info("Trunk tests: %d pending", len(gateways))
+            for gw in gateways:
+                gw_id = gw.get('id')
+                if not gw_id:
+                    continue
+                try:
+                    result = _do_trunk_test(gw)
+                    log.info("Trunk test gw#%s %s:%s → %s",
+                             gw_id, gw.get('host', '?'), gw.get('port', 5060), result.get('status'))
+                    _post_to_api(api_url, token, f'/ivr/gateways/{gw_id}/test-result', {'result': result})
+                except Exception as e:
+                    log.warning("Trunk test error gw#%s: %s", gw_id, e)
+        except Exception as e:
+            log.warning("Trunk test thread error: %s", e)
+
+
 def _queue_stats_thread(cfg_ref, ami_ref):
     """
     Background thread: every QUEUE_STATS_INTERVAL seconds —
@@ -766,6 +935,10 @@ def main():
         # Start queue stats background thread
         qt = threading.Thread(target=_queue_stats_thread, args=(cfg_ref, ami_ref), daemon=True)
         qt.start()
+
+        # Start trunk/gateway connectivity test background thread
+        tt = threading.Thread(target=_trunk_test_thread, args=(cfg_ref,), daemon=True)
+        tt.start()
 
         # Wait for initial relay connection (up to 30s)
         for _ in range(30):
