@@ -1416,11 +1416,11 @@ function qualid_collect_gateway_registrations() {
     if (empty($m[1])) return array();
 
     // pjsip show contacts lists all active AOR contacts — a registered gateway
-    // will have a line containing its AOR name ({username}_gw_aor).
+    // will have a line like "Contact:  <AOR>/<URI>" where AOR = username.
     $contactsOut = (string) @shell_exec('/usr/sbin/asterisk -rx "pjsip show contacts" 2>/dev/null');
     $result = array();
     foreach ($m[1] as $ep) {
-        $result[$ep] = strpos($contactsOut, $ep . '_gw_aor') !== false;
+        $result[$ep] = strpos($contactsOut, $ep . '/') !== false;
     }
     return $result;
 }
