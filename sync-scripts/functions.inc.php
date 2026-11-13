@@ -1398,9 +1398,12 @@ function qualid_write_gateway_endpoints($gateways) {
 
             $isTls     = ($transport === 'tls');
             $ep        = "{$user}_carrier";
-            $suffix    = $isTls ? ";transport=tls" : '';
-            $serverUri = "sip:{$host}:{$port}{$suffix}";
-            $clientUri = "sip:{$user}@{$host}{$suffix}";
+            // Asterisk config treats ';' as inline comments, so we CANNOT use
+            // "sip:host:port;transport=tls" — the ;transport=tls would be stripped.
+            // For TLS trunks we specify transport= explicitly and omit the URI param.
+            $tlsTransport = QUALID_TRUNK_NAME . '_tls_transport'; // reuse the existing proven TLS transport
+            $serverUri = "sip:{$host}:{$port}";
+            $clientUri = "sip:{$user}@{$host}";
 
             $codecLines = "disallow=all\n";
             foreach ($codecs as $c) {
@@ -1409,8 +1412,6 @@ function qualid_write_gateway_endpoints($gateways) {
             }
 
             $conf .= "; --- {$user} (SIP Trunk → {$host}:{$port} {$transport}) ---\n";
-
-            // No per-trunk TLS transport — PJSIP auto-selects existing TLS transport based on server_uri ;transport=tls
 
             // Auth
             $conf .= "[{$ep}_auth]\n";
@@ -1423,6 +1424,7 @@ function qualid_write_gateway_endpoints($gateways) {
             if ($regEnabled) {
                 $conf .= "[{$ep}_reg]\n";
                 $conf .= "type=registration\n";
+                if ($isTls) $conf .= "transport={$tlsTransport}\n";
                 $conf .= "server_uri={$serverUri}\n";
                 $conf .= "client_uri={$clientUri}\n";
                 $conf .= "outbound_auth={$ep}_auth\n";
@@ -1441,6 +1443,7 @@ function qualid_write_gateway_endpoints($gateways) {
             $conf .= "type=endpoint\n";
             $conf .= "context={$context}\n";
             $conf .= $codecLines;
+            if ($isTls) $conf .= "transport={$tlsTransport}\n";
             $conf .= "outbound_auth={$ep}_auth\n";
             $conf .= "aors={$ep}_aor\n";
             $conf .= "from_domain={$host}\n";
