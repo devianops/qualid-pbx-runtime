@@ -1430,7 +1430,7 @@ function qualid_write_gateway_endpoints($gateways) {
                 $conf .= "outbound_auth={$ep}_auth\n";
                 $conf .= "contact_user={$user}\n";
                 $conf .= "retry_interval=60\n";
-                $conf .= "expiry=3600\n\n";
+                $conf .= "expiration=3600\n\n";
             }
 
             // AOR — static contact pointing at carrier
