@@ -1385,7 +1385,7 @@ function qualid_write_gateway_endpoints($gateways) {
         $context   = preg_replace('/[^A-Za-z0-9_-]/', '', $gw['context'] ?? 'qualid-ivr');
         if (!$user || !$pass) continue;
 
-        if ($type === 'sip_trunk') {
+        if ($type === 'sip_trunk' || $type === 'cloud_sip_trunk') {
             // ── Outbound SIP trunk — PBX registers to carrier ─────────────────
             $host      = trim($gw['host'] ?? '');
             $port      = (int)($gw['port'] ?? 5060);
