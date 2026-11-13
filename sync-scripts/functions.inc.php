@@ -1479,8 +1479,9 @@ function qualid_write_gateway_endpoints($gateways) {
     file_put_contents('/etc/asterisk/pjsip_qualid_gateways.conf', $conf);
     qualid_ensure_include('/etc/asterisk/pjsip.conf', 'pjsip_qualid_gateways.conf');
 
-    // Reload PJSIP so Asterisk picks up the new/removed endpoints immediately
-    @exec('/usr/sbin/asterisk -rx "module reload res_pjsip.so" 2>/dev/null');
+    // Reload all PJSIP modules — "pjsip reload" covers both res_pjsip.so (endpoints)
+    // and res_pjsip_outbound_registration.so (outbound registrations).
+    @exec('/usr/sbin/asterisk -rx "pjsip reload" 2>/dev/null');
 }
 
 /**
