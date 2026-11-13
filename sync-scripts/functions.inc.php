@@ -102,57 +102,12 @@ function qualid_get_device_uuid() {
  * Resolve the relay hostname to an IP address, bypassing the system DNS.
  * Strategy (automatic, no CLI required):
  *   1. PHP's built-in gethostbyname() — works on most systems.
- *   2. Cloudflare DNS-over-HTTPS (1.1.1.1) — always reachable over HTTPS;
- *      works even when the system DNS doesn't resolve .xyz TLD domains.
- *   3. Last resort: the known VPS IP constant (QUALID_CLOUD_IP).
- * The resolved IP is cached in config.json for 1 hour so this adds no
- * latency to normal requests.
+ * The API domain (qualidapi1.1215515.xyz) is behind Cloudflare CDN and must
+ * NOT be DNS-resolved for SIP signalling — Cloudflare terminates HTTPS but does
+ * not relay raw TCP/TLS SIP.  The direct VPS IP is already the QUALID_CLOUD_IP
+ * constant, so return it immediately.
  */
 function qualid_resolve_relay_ip() {
-    $host = 'qualidapi1.1215515.xyz';
-
-    // Check 1-hour cache
-    $cached = qualid_get('relay_ip_cache', null);
-    if (is_array($cached)
-        && !empty($cached['ip'])
-        && !empty($cached['at'])
-        && (time() - (int) $cached['at']) < 3600) {
-        return $cached['ip'];
-    }
-
-    // Try system resolver first (fast)
-    $ip = gethostbyname($host);
-    if ($ip !== $host && filter_var($ip, FILTER_VALIDATE_IP)) {
-        qualid_set('relay_ip_cache', array('ip' => $ip, 'at' => time()));
-        return $ip;
-    }
-
-    // Fall back to Cloudflare DNS-over-HTTPS — no system DNS needed,
-    // connects to 1.1.1.1 by IP so no DNS required for this call itself.
-    $ch = curl_init('https://1.1.1.1/dns-query?name=' . rawurlencode($host) . '&type=A');
-    curl_setopt_array($ch, array(
-        CURLOPT_HTTPHEADER     => array('Accept: application/dns-json'),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 5,
-        CURLOPT_SSL_VERIFYPEER => true,
-    ));
-    $raw = curl_exec($ch);
-    curl_close($ch);
-
-    $dns = json_decode($raw, true);
-    if (!empty($dns['Answer']) && is_array($dns['Answer'])) {
-        foreach ($dns['Answer'] as $rec) {
-            if (isset($rec['type']) && (int) $rec['type'] === 1
-                && isset($rec['data'])
-                && filter_var($rec['data'], FILTER_VALIDATE_IP)) {
-                $ip = $rec['data'];
-                qualid_set('relay_ip_cache', array('ip' => $ip, 'at' => time()));
-                return $ip;
-            }
-        }
-    }
-
-    // Last resort: hardcoded VPS IP
     return QUALID_CLOUD_IP;
 }
 
