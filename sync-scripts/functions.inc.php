@@ -1516,9 +1516,13 @@ function qualid_collect_gateway_registrations() {
     foreach ($m[1] as $ep) {
         // Hardware GW:  contacts output has "{ep}/sip:..."
         // SIP trunk:    registrations output has "{ep}_reg/sip:..." (reg object has _reg suffix)
-        $result[$ep] = strpos($contactsOut, $ep . '/') !== false
-                    || strpos($regOut,      $ep . '/') !== false
-                    || strpos($regOut,      $ep . '_reg/') !== false;
+        $registered = strpos($contactsOut, $ep . '/') !== false
+                   || strpos($regOut,      $ep . '/') !== false
+                   || strpos($regOut,      $ep . '_reg/') !== false;
+        // SIP trunk endpoints are named "{username}_carrier" in PJSIP but stored as
+        // "{username}" in the DB — strip the suffix so the heartbeat key matches.
+        $key = preg_replace('/_carrier$/', '', $ep);
+        $result[$key] = $registered;
     }
     return $result;
 }
