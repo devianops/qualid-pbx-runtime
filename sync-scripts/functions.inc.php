@@ -1445,7 +1445,11 @@ function qualid_write_gateway_endpoints($gateways) {
                 $conf .= "outbound_auth={$ep}_auth\n";
                 $conf .= "contact_user={$user}\n";
                 $conf .= "retry_interval=60\n";
-                $conf .= "expiration=3600\n\n";
+                // Short expiry so kamailio relay re-registers every 2 minutes.
+                // Prevents rogue registrations at other IPs from holding the
+                // carrier slot for a full hour.
+                $expiry = ($type === 'cloud_sip_trunk') ? 120 : 3600;
+                $conf .= "expiration={$expiry}\n\n";
             }
 
             // AOR — static contact pointing at carrier
