@@ -36,6 +36,21 @@ if (!empty($_pjsip_cfg['trunk_user']) && !empty($_pjsip_cfg['trunk_pass'])) {
 unset($_pjsip_cfg, $_pjsip_before, $_pjsip_after);
 
 qualid_push_pbx_host($token);
+
+// Regenerate the IVR + trunk dialplan on every sync so fixes (e.g. caller-ID
+// extraction) take effect without requiring a full re-activation.
+// Only reloads the dialplan when the file actually changed.
+$_dp_cfg = qualid_load_config();
+if (!empty($_dp_cfg['sip_domain'])) {
+    $_dp_before = @file_get_contents('/etc/asterisk/extensions_qualid.conf');
+    qualid_write_dialplan($_dp_cfg);
+    $_dp_after = @file_get_contents('/etc/asterisk/extensions_qualid.conf');
+    if ($_dp_before !== $_dp_after) {
+        @exec('/usr/sbin/asterisk -rx "dialplan reload" > /dev/null 2>&1');
+    }
+}
+unset($_dp_cfg, $_dp_before, $_dp_after);
+
 qualid_sync_extensions($token);
 qualid_sync_queues($token);
 qualid_sync_gateways($token);

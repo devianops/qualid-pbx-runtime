@@ -1279,8 +1279,13 @@ function qualid_sync_extensions($token) {
 
     if (!empty($list_result['extensions']) && is_array($list_result['extensions'])) {
         qualid_write_extensions_cache($list_result['extensions']);
+        $_ext_before = @file_get_contents('/etc/asterisk/pjsip_qualid_extensions.conf');
         qualid_write_pjsip_extensions($list_result['extensions']);
-        exec('/usr/sbin/asterisk -rx "module reload res_pjsip.so" 2>/dev/null');
+        $_ext_after = @file_get_contents('/etc/asterisk/pjsip_qualid_extensions.conf');
+        if ($_ext_before !== $_ext_after) {
+            exec('/usr/sbin/asterisk -rx "module reload res_pjsip.so" 2>/dev/null');
+        }
+        unset($_ext_before, $_ext_after);
     } elseif (!empty($rows)) {
         // Fallback: cloud unreachable — write PJSIP from local cache (e.g. after a reboot).
         qualid_write_pjsip_extensions($rows);
