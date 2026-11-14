@@ -1412,6 +1412,12 @@ function qualid_write_gateway_endpoints($gateways) {
                 $conf .= "client_uri={$clientUri}\n";
                 $conf .= "outbound_auth={$ep}_auth\n";
                 $conf .= "contact_user={$user}\n";
+                if ($type === 'cloud_sip_trunk') {
+                    // Route the REGISTER through the VPS kamailio so the carrier sees
+                    // 13.140.143.85 as the source IP — not the PBX's NAT exit IP.
+                    // FXO and regular SIP trunks are unaffected (no outbound_proxy).
+                    $conf .= "outbound_proxy=sip:" . QUALID_CLOUD_IP . ":443;transport=tls\n";
+                }
                 $conf .= "retry_interval=60\n";
                 $conf .= "expiration=3600\n\n";
             }
