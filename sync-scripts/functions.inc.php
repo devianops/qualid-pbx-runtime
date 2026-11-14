@@ -1408,19 +1408,19 @@ function qualid_write_gateway_endpoints($gateways) {
                 $conf .= "[{$ep}_reg]\n";
                 $conf .= "type=registration\n";
                 if ($isTls) $conf .= "transport={$tlsTransport}\n";
-                $conf .= "server_uri={$serverUri}\n";
+                if ($type === 'cloud_sip_trunk') {
+                    // Send the REGISTER to kamailio's carrier port (5061) on the VPS.
+                    // Avoids outbound_proxy entirely — Asterisk strips URI params (';transport=tls')
+                    // from outbound_proxy values regardless of quoting or escaping.
+                    // kamailio identifies carrier REGISTERs by port 5061 + external To-domain,
+                    // then relays to the actual carrier using the To-domain from client_uri.
+                    $conf .= "server_uri=sip:" . QUALID_CLOUD_IP . ":5061\n";
+                } else {
+                    $conf .= "server_uri={$serverUri}\n";
+                }
                 $conf .= "client_uri={$clientUri}\n";
                 $conf .= "outbound_auth={$ep}_auth\n";
                 $conf .= "contact_user={$user}\n";
-                if ($type === 'cloud_sip_trunk') {
-                    // Route the REGISTER through the VPS kamailio so the carrier sees
-                    // 13.140.143.85 as the source IP — not the PBX's NAT exit IP.
-                    // FXO and regular SIP trunks are unaffected (no outbound_proxy).
-                    // Angle brackets prevent Asterisk's conf parser from treating ';' as a
-                    // comment delimiter inside the URI.  ;lr = loose routing (Request-URI stays
-                    // the carrier domain, proxy goes in Route header).
-                    $conf .= "outbound_proxy=<sip:" . QUALID_CLOUD_IP . ":443;lr;transport=tls>\n";
-                }
                 $conf .= "retry_interval=60\n";
                 $conf .= "expiration=3600\n\n";
             }
