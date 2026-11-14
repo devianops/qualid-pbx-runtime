@@ -19,6 +19,22 @@ if (empty($token)) {
 }
 
 qualid_write_rtp_conf();   // Rotate TURN credentials (24h TTL, refreshed every 5 min)
+
+// Regenerate pjsip_qualid.conf on every sync so module updates that change the
+// PJSIP config (new endpoints, transports, identify blocks, etc.) take effect
+// automatically without requiring a manual reconnect or reactivation.
+// Only reloads PJSIP when the file actually changed to avoid disrupting live calls.
+$_pjsip_cfg = qualid_load_config();
+if (!empty($_pjsip_cfg['trunk_user']) && !empty($_pjsip_cfg['trunk_pass'])) {
+    $_pjsip_before = @file_get_contents('/etc/asterisk/pjsip_qualid.conf');
+    qualid_write_pjsip($_pjsip_cfg);
+    $_pjsip_after = @file_get_contents('/etc/asterisk/pjsip_qualid.conf');
+    if ($_pjsip_before !== $_pjsip_after) {
+        @exec('/usr/sbin/asterisk -rx "pjsip reload" > /dev/null 2>&1');
+    }
+}
+unset($_pjsip_cfg, $_pjsip_before, $_pjsip_after);
+
 qualid_push_pbx_host($token);
 qualid_sync_extensions($token);
 qualid_sync_queues($token);
