@@ -1416,9 +1416,11 @@ function qualid_write_gateway_endpoints($gateways) {
                     // Route the REGISTER through the VPS kamailio so the carrier sees
                     // 13.140.143.85 as the source IP — not the PBX's NAT exit IP.
                     // FXO and regular SIP trunks are unaffected (no outbound_proxy).
-                    // Asterisk conf parser treats ';' as a comment delimiter, so the
-                    // transport parameter must be escaped as '\;' to survive into pjsip.
-                    $conf .= "outbound_proxy=sip:" . QUALID_CLOUD_IP . ":443\\;transport=tls\n";
+                    // ;lr makes PJSIP use loose routing: the Request-URI stays sip.telnyx.com
+                    // and the proxy goes into a Route header.  Without ;lr, PJSIP uses strict
+                    // routing and puts the proxy address as the Request-URI, causing kamailio
+                    // to relay back to itself in a loop.
+                    $conf .= "outbound_proxy=sip:" . QUALID_CLOUD_IP . ":443;lr;transport=tls\n";
                 }
                 $conf .= "retry_interval=60\n";
                 $conf .= "expiration=3600\n\n";
