@@ -407,6 +407,29 @@ from_user={$trunk_user}
 from_domain={$cloud_srv}
 CONF;
 
+    // Carrier inbound — receives Telnyx INVITEs relayed by kamailio CARRIER_INBOUND.
+    // All INVITEs arriving at the PBX from the VPS are carrier calls (agent calls go
+    // the other direction: PBX → kamailio, never kamailio → PBX for agents).
+    // IP-based identify is therefore safe and sufficient.
+    $conf .= "\n; --- Carrier inbound endpoint (INVITEs from kamailio for Telnyx calls) ---\n";
+    $conf .= "[qualid_carrier_inbound]\n";
+    $conf .= "type=endpoint\n";
+    $conf .= "transport={$trunk_name}_tls_transport\n";
+    $conf .= "context=qualid-ivr\n";
+    $conf .= "disallow=all\n";
+    $conf .= "allow=ulaw\n";
+    $conf .= "allow=alaw\n";
+    $conf .= "allow=g722\n";
+    $conf .= "allow=g729\n";
+    $conf .= "direct_media=no\n";
+    $conf .= "dtmf_mode=rfc4733\n";
+    $conf .= "rtp_symmetric=yes\n";
+    $conf .= "force_rport=yes\n\n";
+    $conf .= "[qualid_carrier_identify]\n";
+    $conf .= "type=identify\n";
+    $conf .= "endpoint=qualid_carrier_inbound\n";
+    $conf .= "match={$cloud_ip}\n\n";
+
     $path = '/etc/asterisk/pjsip_qualid.conf';
     file_put_contents($path, $conf);
     // Always include directly in pjsip.conf — we run on vanilla Asterisk (no FreePBX GUI).
