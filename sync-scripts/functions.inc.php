@@ -29,6 +29,35 @@ define('QUALID_MODULE_DIR',    '/etc/qualid');                    // config live
 define('QUALID_DEVICE_TYPE',   'qualid_pbx_os');                  // sent in login + provision calls
 
 // ---------------------------------------------------------------------------
+// Public IP detection (needed for SDP media_address behind NAT)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the PBX's public (NAT-exit) IPv4 address.
+ * Result is cached in /etc/qualid/public_ip for 24 hours to avoid an
+ * external call on every sync run.  Falls back to the LAN IP if the
+ * detection service is unreachable.
+ */
+function qualid_detect_public_ip() {
+    $cache = QUALID_MODULE_DIR . '/public_ip';
+    if (file_exists($cache) && (time() - filemtime($cache)) < 86400) {
+        $ip = trim(@file_get_contents($cache));
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return $ip;
+        }
+    }
+    $ch = curl_init('https://api.ipify.org');
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5]);
+    $ip = trim((string) curl_exec($ch));
+    curl_close($ch);
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        @file_put_contents($cache, $ip);
+        return $ip;
+    }
+    return gethostbyname(gethostname()); // LAN IP fallback
+}
+
+// ---------------------------------------------------------------------------
 // Config storage (JSON file — no FreePBX API dependency)
 // ---------------------------------------------------------------------------
 
@@ -411,6 +440,7 @@ CONF;
     // All INVITEs arriving at the PBX from the VPS are carrier calls (agent calls go
     // the other direction: PBX → kamailio, never kamailio → PBX for agents).
     // IP-based identify is therefore safe and sufficient.
+    $public_ip = qualid_detect_public_ip();
     $conf .= "\n; --- Carrier inbound endpoint (INVITEs from kamailio for Telnyx calls) ---\n";
     $conf .= "[qualid_carrier_inbound]\n";
     $conf .= "type=endpoint\n";
@@ -424,7 +454,8 @@ CONF;
     $conf .= "direct_media=no\n";
     $conf .= "dtmf_mode=rfc4733\n";
     $conf .= "rtp_symmetric=yes\n";
-    $conf .= "force_rport=yes\n\n";
+    $conf .= "force_rport=yes\n";
+    $conf .= "media_address={$public_ip}\n\n";
     $conf .= "[qualid_carrier_identify]\n";
     $conf .= "type=identify\n";
     $conf .= "endpoint=qualid_carrier_inbound\n";
